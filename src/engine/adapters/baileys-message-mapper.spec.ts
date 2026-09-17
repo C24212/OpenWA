@@ -2,6 +2,9 @@ import {
   BaileysIncomingFields,
   buildIncomingMessageFromBaileys,
   extractBaileysBody,
+  extractBaileysButtonReply,
+  extractBaileysButtons,
+  resolveBaileysButtonClick,
   extractBaileysCommerce,
   extractBaileysContext,
   isBaileysCatalogShare,
@@ -27,6 +30,10 @@ describe('mapBaileysMessageType (baileys content-type -> neutral MessageType)', 
     ['buttonsMessage', false, 'text'],
     ['templateMessage', false, 'text'],
     ['interactiveResponseMessage', false, 'text'],
+    ['buttonsResponseMessage', false, 'text'],
+    ['templateButtonReplyMessage', false, 'text'],
+    ['listResponseMessage', false, 'text'],
+    ['listMessage', false, 'text'],
     // Meta masks high-security business messages (enterprise OTPs) on linked/companion devices,
     // delivering a bodyless `placeholderMessage` (PlaceholderType MASK_LINKED_DEVICES). Surface it as
     // its own `masked` type so it is distinguishable from a genuinely unparseable message (#574).
@@ -171,6 +178,10 @@ describe('extractBaileysBody (inbound text/caption + interactive shapes)', () =>
       'Track order',
     );
   });
+
+  it('extracts a list-row title the user selected', () => {
+    expect(extractBaileysBody({ listResponseMessage: { title: 'Express shipping' } })).toBe('Express shipping');
+  });
 });
 
 describe('extractBaileysContext (quoted body shares the live body extractor)', () => {
@@ -192,6 +203,16 @@ describe('extractBaileysContext (quoted body shares the live body extractor)', (
     expect(quoted({ imageMessage: { caption: 'pic' } })?.body).toBe('pic');
     expect(quoted({ conversation: 'the original' })?.body).toBe('the original');
     expect(quoted({ stickerMessage: {} })?.body).toBe('');
+  });
+
+  it('carries a quote from a button-reply contextInfo', () => {
+    expect(
+      extractBaileysContext({
+        buttonsResponseMessage: {
+          contextInfo: { stanzaId: 'wamid.prompt', quotedMessage: { conversation: 'Pick one' } },
+        },
+      }).quotedMessage,
+    ).toEqual({ id: 'wamid.prompt', body: 'Pick one' });
   });
 });
 
@@ -363,6 +384,294 @@ describe('buildIncomingMessageFromBaileys', () => {
     expect(buildIncomingMessageFromBaileys({ ...base, contentType: 'productMessage', isCatalogShare: true }).type).toBe(
       'unknown',
     );
+  });
+
+  it('carries a button reply and types the reply content as text', () => {
+    const r = buildIncomingMessageFromBaileys({
+      ...base,
+      contentType: 'buttonsResponseMessage',
+      body: 'Yes, notify me',
+      button: { id: 'btn_yes', text: 'Yes, notify me' },
+    });
+    expect(r.type).toBe('text');
+    expect(r.button).toEqual({ id: 'btn_yes', text: 'Yes, notify me' });
+  });
+
+  it('fills body from the button label when the content body is empty', () => {
+    const r = buildIncomingMessageFromBaileys({
+      ...base,
+      contentType: 'interactiveResponseMessage',
+      body: '',
+      button: { id: 'qr_1', text: 'Confirm' },
+    });
+    expect(r.body).toBe('Confirm');
+    expect(r.button).toEqual({ id: 'qr_1', text: 'Confirm' });
+  });
+
+  it('carries prompt buttons on an inbound business message', () => {
+    const r = buildIncomingMessageFromBaileys({
+      ...base,
+      contentType: 'buttonsMessage',
+      body: 'Já é nosso cliente?',
+      buttons: [
+        { id: 'yes', text: 'Sim' },
+        { id: 'no', text: 'Não' },
+      ],
+    });
+    expect(r.type).toBe('text');
+    expect(r.buttons).toEqual([
+      { id: 'yes', text: 'Sim' },
+      { id: 'no', text: 'Não' },
+    ]);
+  });
+});
+
+describe('extractBaileysButtonReply (button / list / native-flow ids)', () => {
+  it('extracts a classic buttonsResponseMessage id and label', () => {
+    expect(
+      extractBaileysButtonReply(
+        {
+          buttonsResponseMessage: { selectedButtonId: 'btn_yes', selectedDisplayText: 'Yes, notify me' },
+        },
+        'buttonsResponseMessage',
+      ),
+    ).toEqual({ id: 'btn_yes', text: 'Yes, notify me' });
+  });
+
+  it('extracts a templateButtonReplyMessage id and label', () => {
+    expect(
+      extractBaileysButtonReply(
+        {
+          templateButtonReplyMessage: { selectedId: 'track', selectedDisplayText: 'Track order' },
+        },
+        'templateButtonReplyMessage',
+      ),
+    ).toEqual({ id: 'track', text: 'Track order' });
+  });
+
+  it('extracts a listResponseMessage row id and title', () => {
+    expect(
+      extractBaileysButtonReply(
+        {
+          listResponseMessage: {
+            title: 'Express shipping',
+            singleSelectReply: { selectedRowId: 'ship_express' },
+          },
+        },
+        'listResponseMessage',
+      ),
+    ).toEqual({ id: 'ship_express', text: 'Express shipping' });
+  });
+
+  it('extracts a native-flow interactiveResponseMessage id from paramsJson', () => {
+    expect(
+      extractBaileysButtonReply(
+        {
+          interactiveResponseMessage: {
+            nativeFlowResponseMessage: {
+              name: 'quick_reply',
+              paramsJson: JSON.stringify({ id: 'qr_1', display_text: 'Confirm' }),
+            },
+          },
+        },
+        'interactiveResponseMessage',
+      ),
+    ).toEqual({ id: 'qr_1', text: 'Confirm' });
+  });
+
+  it('accepts button_id / displayText aliases in native-flow params', () => {
+    expect(
+      extractBaileysButtonReply(
+        {
+          interactiveResponseMessage: {
+            nativeFlowResponseMessage: {
+              paramsJson: JSON.stringify({ button_id: 'alt', displayText: 'OK' }),
+            },
+          },
+        },
+        'interactiveResponseMessage',
+      ),
+    ).toEqual({ id: 'alt', text: 'OK' });
+  });
+
+  it('yields nothing when the actionable id is missing or the JSON is malformed', () => {
+    expect(
+      extractBaileysButtonReply({ buttonsResponseMessage: { selectedDisplayText: 'Yes' } }, 'buttonsResponseMessage'),
+    ).toBeUndefined();
+    expect(
+      extractBaileysButtonReply(
+        { interactiveResponseMessage: { nativeFlowResponseMessage: { paramsJson: '{not-json' } } },
+        'interactiveResponseMessage',
+      ),
+    ).toBeUndefined();
+    expect(
+      extractBaileysButtonReply(
+        {
+          interactiveResponseMessage: {
+            nativeFlowResponseMessage: { paramsJson: JSON.stringify({ display_text: 'OK' }) },
+          },
+        },
+        'interactiveResponseMessage',
+      ),
+    ).toBeUndefined();
+    expect(extractBaileysButtonReply({}, 'conversation')).toBeUndefined();
+  });
+});
+
+describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
+  it('extracts classic buttonsMessage choices', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          buttonsMessage: {
+            buttons: [
+              { buttonId: 'yes', buttonText: { displayText: 'Sim' } },
+              { buttonId: 'no', buttonText: { displayText: 'Não' } },
+            ],
+          },
+        },
+        'buttonsMessage',
+      ),
+    ).toEqual([
+      { id: 'yes', text: 'Sim' },
+      { id: 'no', text: 'Não' },
+    ]);
+  });
+
+  it('extracts interactiveMessage native-flow quick replies', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          interactiveMessage: {
+            nativeFlowMessage: {
+              buttons: [
+                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ id: 'yes', display_text: 'Sim' }) },
+                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ id: 'no', display_text: 'Não' }) },
+              ],
+            },
+          },
+        },
+        'interactiveMessage',
+      ),
+    ).toEqual([
+      { id: 'yes', text: 'Sim' },
+      { id: 'no', text: 'Não' },
+    ]);
+  });
+
+  it('extracts listMessage rows as buttons', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          listMessage: {
+            sections: [{ rows: [{ rowId: 'ship_express', title: 'Express' }, { rowId: 'ship_std', title: 'Standard' }] }],
+          },
+        },
+        'listMessage',
+      ),
+    ).toEqual([
+      { id: 'ship_express', text: 'Express' },
+      { id: 'ship_std', text: 'Standard' },
+    ]);
+  });
+
+  it('yields nothing for a non-prompt content type', () => {
+    expect(extractBaileysButtons({}, 'conversation')).toBeUndefined();
+    expect(extractBaileysButtons({ buttonsMessage: { buttons: [] } }, 'buttonsMessage')).toBeUndefined();
+  });
+});
+
+describe('resolveBaileysButtonClick (API click against a stored prompt)', () => {
+  it('builds a buttonsResponseMessage for a classic buttonsMessage prompt', () => {
+    const result = resolveBaileysButtonClick(
+      {
+        buttonsMessage: {
+          buttons: [
+            { buttonId: 'yes', buttonText: { displayText: 'Sim' } },
+            { buttonId: 'no', buttonText: { displayText: 'Não' } },
+          ],
+        },
+      },
+      'buttonsMessage',
+      'yes',
+    );
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        id: 'yes',
+        text: 'Sim',
+        index: 0,
+        message: {
+          buttonsResponseMessage: {
+            selectedButtonId: 'yes',
+            selectedDisplayText: 'Sim',
+            type: 1,
+          },
+        },
+      },
+    });
+  });
+
+  it('rejects an unknown buttonId and a non-prompt content type', () => {
+    expect(
+      resolveBaileysButtonClick(
+        { buttonsMessage: { buttons: [{ buttonId: 'yes', buttonText: { displayText: 'Sim' } }] } },
+        'buttonsMessage',
+        'nope',
+      ),
+    ).toEqual({ ok: false, error: 'unknown_button' });
+    expect(resolveBaileysButtonClick({}, 'conversation', 'yes')).toEqual({ ok: false, error: 'not_a_prompt' });
+  });
+
+  it('skips cta_url interactive buttons so only quick_reply is clickable', () => {
+    const result = resolveBaileysButtonClick(
+      {
+        interactiveMessage: {
+          nativeFlowMessage: {
+            buttons: [
+              {
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({ id: 'docs', display_text: 'Docs', url: 'https://x' }),
+              },
+              {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({ id: 'yes', display_text: 'Sim' }),
+              },
+            ],
+          },
+        },
+      },
+      'interactiveMessage',
+      'yes',
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.message).toEqual({
+        templateButtonReplyMessage: {
+          selectedId: 'yes',
+          selectedDisplayText: 'Sim',
+          selectedIndex: 0,
+        },
+      });
+    }
+    expect(
+      resolveBaileysButtonClick(
+        {
+          interactiveMessage: {
+            nativeFlowMessage: {
+              buttons: [
+                {
+                  name: 'cta_url',
+                  buttonParamsJson: JSON.stringify({ id: 'docs', display_text: 'Docs', url: 'https://x' }),
+                },
+              ],
+            },
+          },
+        },
+        'interactiveMessage',
+        'docs',
+      ),
+    ).toEqual({ ok: false, error: 'not_a_prompt' });
   });
 });
 

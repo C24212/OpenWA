@@ -17,6 +17,7 @@ import {
 } from '../interfaces/whatsapp-engine.interface';
 import { toEngineParticipants } from './baileys-groups';
 import { buildVCard } from './vcard';
+import { resolveBaileysButtonClick } from './baileys-message-mapper';
 import { loadRemoteMediaBuffer } from '../../common/media/load-remote-media';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { EngineRefusedError } from '../../common/errors/engine-refused.error';
@@ -473,6 +474,66 @@ export class BaileysMessaging {
     // published in docs/06.
     this.assertStoredInChat(quoted, chatId, quotedMsgId);
     return this.sendContent(chatId, { text, ...this.withMentions(mentions) }, { quoted });
+  }
+
+  /**
+   * Send a structured button/list reply against a stored business prompt. Relays the response proto
+   * (official Baileys has no buttonReply helper) quoted to the prompt message.
+   */
+  async clickButton(chatId: string, messageId: string, buttonId: string, text?: string): Promise<MessageResult> {
+    this.host.ensureReady();
+    const quoted = await this.requireStored(messageId);
+    this.assertStoredInChat(quoted, chatId, messageId);
+
+    const b = await this.host.loadLib();
+    const normalized = b.normalizeMessageContent(quoted.message ?? undefined) ?? quoted.message ?? {};
+    const contentType = b.getContentType(normalized);
+    const resolved = resolveBaileysButtonClick(normalized, contentType, buttonId, text);
+    if (!resolved.ok) {
+      if (resolved.error === 'unknown_button') {
+        throw new BadRequestException(
+          `buttonId "${buttonId}" is not among the clickable choices on message ${messageId}`,
+        );
+      }
+      throw new BadRequestException(
+        `message ${messageId} is not a WhatsApp Business button/list prompt that can be clicked`,
+      );
+    }
+
+    const jid = await this.toDeliverableJid(chatId);
+    const generated = b.generateWAMessageFromContent(
+      jid,
+      // Structural builder — cast at the relay boundary onto Baileys' proto.IMessage.
+      resolved.payload.message as Parameters<typeof b.generateWAMessageFromContent>[1],
+      {
+        quoted,
+        // MessageGenerationOptionsFromContent requires userJid: string (not optional).
+        userJid: this.host.normalizedSelfJid() || jid,
+      },
+    );
+    if (!generated?.message || !generated.key?.id) {
+      throw new InternalServerErrorException('Failed to build button-click message');
+    }
+
+    await this.sock().relayMessage(jid, generated.message, { messageId: generated.key.id });
+
+    // Stamp fromMe so the store / own-send echo treat this like any other API send.
+    const sent: WAMessage = {
+      ...generated,
+      key: { ...generated.key, fromMe: true, remoteJid: jid },
+      messageTimestamp: generated.messageTimestamp ?? Math.floor(Date.now() / 1000),
+    };
+    void this.host.putStoredMessage(sent)?.catch(err =>
+      this.host.logger.warn('Failed to persist button-click message to store', {
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    void this.emitOwnSendEcho(sent);
+
+    return {
+      id: sent.key.id ?? '',
+      timestamp: this.host.toUnixSeconds(sent.messageTimestamp),
+    };
   }
 
   async forwardMessage(fromChatId: string, toChatId: string, messageId: string): Promise<MessageResult> {

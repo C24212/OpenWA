@@ -731,6 +731,15 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     return this.messaging.votePoll(chatId, pollMessageId, options);
   }
 
+  clickButton(
+    _chatId: string,
+    _messageId: string,
+    _buttonId: string,
+    _text?: string,
+  ): Promise<MessageResult> {
+    throw new EngineNotSupportedError('clickButton');
+  }
+
   unpinMessage(chatId: string, messageId: string): Promise<void> {
     return this.messaging.unpinMessage(chatId, messageId);
   }

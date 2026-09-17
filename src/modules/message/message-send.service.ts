@@ -516,6 +516,32 @@ export class MessageSendService {
     return this.persistSentState(message, result);
   }
 
+  async clickButton(
+    sessionId: string,
+    dto: { chatId: string; messageId: string; buttonId: string; text?: string },
+  ): Promise<MessageResponseDto> {
+    const finalDto = await this.applySendingGate(sessionId, 'click-button', dto);
+    const engine = this.getEngine(sessionId);
+
+    const message = await this.saveOutgoingMessage(sessionId, {
+      chatId: finalDto.chatId,
+      body: finalDto.text || finalDto.buttonId,
+      type: 'text',
+      metadata: {
+        quotedMessage: { id: finalDto.messageId, body: '' },
+        button: { id: finalDto.buttonId, text: finalDto.text },
+      },
+    });
+
+    let result: MessageResult;
+    try {
+      result = await engine.clickButton(finalDto.chatId, finalDto.messageId, finalDto.buttonId, finalDto.text);
+    } catch (error) {
+      return this.failSend(sessionId, 'click-button', message, finalDto, error);
+    }
+    return this.persistSentState(message, result);
+  }
+
   async forward(
     sessionId: string,
     dto: { fromChatId: string; toChatId: string; messageId: string },

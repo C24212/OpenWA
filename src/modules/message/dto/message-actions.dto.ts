@@ -287,6 +287,35 @@ export class VotePollDto {
   options!: string[];
 }
 
+export class ClickButtonDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  chatId!: string;
+
+  @ApiProperty({ description: 'WhatsApp id of the business prompt message that offered the buttons.' })
+  @IsString()
+  @IsNotEmpty()
+  messageId!: string;
+
+  @ApiProperty({
+    description:
+      'Stable id of the choice to tap (inbound `buttons[].id`). URL/call CTA buttons cannot be clicked this way.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  buttonId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Visible label of the choice. When omitted, resolved from the stored prompt; falls back to buttonId.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  text?: string;
+}
+
 export class StarMessageDto {
   @ApiProperty()
   @IsString()

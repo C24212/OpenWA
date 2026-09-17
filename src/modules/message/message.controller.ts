@@ -43,6 +43,7 @@ import {
   PinMessageDto,
   StarMessageDto,
   VotePollDto,
+  ClickButtonDto,
   UnpinMessageDto,
 } from './dto/message-actions.dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
@@ -357,6 +358,36 @@ export class MessageController {
   @ApiResponse({ status: 404, description: MESSAGE_NOT_FOUND_404 })
   async reply(@Param('sessionId') sessionId: string, @Body() dto: ReplyMessageDto): Promise<MessageResponseDto> {
     return this.messageService.reply(sessionId, dto);
+  }
+
+  @Post('click-button')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  @ApiOperation({
+    summary: 'Click a button on a WhatsApp Business prompt (Baileys only)',
+    description:
+      'Sends a structured button/list reply quoted to a previously received prompt. Not a native UI ' +
+      'tap — WhatsApp may reject or treat it differently. whatsapp-web.js returns 501. URL/call CTA ' +
+      'buttons cannot be clicked this way.',
+  })
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiResponse({
+    status: 201,
+    description: 'Button reply sent',
+    type: MessageResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Session not active, prompt is not clickable, or buttonId is not among its choices',
+  })
+  @ApiResponse({ status: 404, description: MESSAGE_NOT_FOUND_404 })
+  @ApiResponse({ status: 501, description: ENGINE_NOT_SUPPORTED_501 })
+  @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
+  @ApiResponse({ status: 400, description: RECIPIENT_UNREACHABLE_400 })
+  async clickButton(
+    @Param('sessionId') sessionId: string,
+    @Body() dto: ClickButtonDto,
+  ): Promise<MessageResponseDto> {
+    return this.messageService.clickButton(sessionId, dto);
   }
 
   @Post('forward')

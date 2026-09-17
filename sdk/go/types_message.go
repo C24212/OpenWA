@@ -130,6 +130,14 @@ type ReplyMessageRequest struct {
 	Mentions []string `json:"mentions,omitempty"`
 }
 
+// ClickButtonRequest taps a choice on a WhatsApp Business prompt. Baileys only.
+type ClickButtonRequest struct {
+	ChatID    string `json:"chatId"`
+	MessageID string `json:"messageId"`
+	ButtonID  string `json:"buttonId"`
+	Text      string `json:"text,omitempty"`
+}
+
 // ForwardMessageRequest forwards a message between chats.
 type ForwardMessageRequest struct {
 	FromChatID string `json:"fromChatId"`
@@ -295,6 +303,8 @@ type ChatHistoryMessage struct {
 	Location      *MessageLocation  `json:"location,omitempty"`
 	Order         *MessageOrder     `json:"order,omitempty"`
 	Product       *MessageProduct   `json:"product,omitempty"`
+	Button        *MessageButton    `json:"button,omitempty"`
+	Buttons       []MessageButtonChoice `json:"buttons,omitempty"`
 }
 
 // MessageOrder is the order block on a live history message, present on order messages only: the
@@ -311,6 +321,19 @@ type MessageProduct struct {
 	Title            string `json:"title,omitempty"`
 	Description      string `json:"description,omitempty"`
 	BusinessOwnerJID string `json:"businessOwnerJid,omitempty"`
+}
+
+// MessageButton is the button/list reply block when the sender tapped a WhatsApp Business control.
+// Baileys only; ID is the stable handle, Text the visible label when WhatsApp still carries it.
+type MessageButton struct {
+	ID   string `json:"id"`
+	Text string `json:"text,omitempty"`
+}
+
+// MessageButtonChoice is one choice on an inbound WhatsApp Business prompt (buttons or list rows).
+type MessageButtonChoice struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
 }
 
 // MessageCall is the call block on a live history message, present on call messages only.

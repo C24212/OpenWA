@@ -559,6 +559,21 @@ class MessageProduct(TypedDict):
     businessOwnerJid: NotRequired[str]
 
 
+class MessageButton(TypedDict):
+    """Button/list reply block on a live history message when the sender tapped a WhatsApp Business
+    control. Baileys only; ``id`` is the stable handle, ``text`` the visible label when present."""
+
+    id: str
+    text: NotRequired[str]
+
+
+class MessageButtonChoice(TypedDict):
+    """One choice on an inbound WhatsApp Business prompt (buttons or list rows). Baileys only."""
+
+    id: str
+    text: str
+
+
 class MessageContact(TypedDict, total=False):
     """Sender contact block. History carries ``pushName`` only; the richer fields arrive on
     ``message.received`` when ``WEBHOOK_CONTACT_DETAILS`` is enabled."""
@@ -609,6 +624,8 @@ ChatHistoryMessage = TypedDict(
         "location": NotRequired[MessageLocation],
         "order": NotRequired[MessageOrder],
         "product": NotRequired[MessageProduct],
+        "button": NotRequired[MessageButton],
+        "buttons": NotRequired[list[MessageButtonChoice]],
     },
 )
 
@@ -1102,6 +1119,15 @@ class VotePollRequest(TypedDict):
     chatId: str
     pollMessageId: str
     options: list[str]
+
+
+class ClickButtonRequest(TypedDict):
+    """Click a choice on a WhatsApp Business prompt. Baileys only."""
+
+    chatId: str
+    messageId: str
+    buttonId: str
+    text: NotRequired[str]
 
 
 class StarMessageRequest(TypedDict):

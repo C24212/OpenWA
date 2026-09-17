@@ -141,6 +141,8 @@ interface WireChatHistoryMessage {
   location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
   order?: { orderId: string; token?: string };
   product?: { productId: string; title?: string; description?: string; businessOwnerJid?: string };
+  button?: { id: string; text?: string };
+  buttons?: Array<{ id: string; text: string }>;
 }
 
 /** `Catalog` — the control: this pair already agreed before #754 and must stay agreeing. */

@@ -39,6 +39,22 @@ func TestChatHistoryMessageDecodesEngineFields(t *testing.T) {
 	}
 }
 
+func TestChatHistoryMessageDecodesButtonReply(t *testing.T) {
+	raw := []byte(`{
+	  "id":"true_628@c.us_BTN","from":"628@c.us","to":"629@c.us","chatId":"628@c.us",
+	  "body":"Yes, notify me","type":"text","timestamp":1719312000,"fromMe":false,"isGroup":false,
+	  "kind":"individual","button":{"id":"btn_yes","text":"Yes, notify me"}
+	}`)
+
+	var m ChatHistoryMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m.Button == nil || m.Button.ID != "btn_yes" || m.Button.Text != "Yes, notify me" {
+		t.Errorf("button = %+v, want {ID:btn_yes Text:Yes, notify me}", m.Button)
+	}
+}
+
 func TestChatHistoryMessageLeavesAbsentFieldsEmpty(t *testing.T) {
 	raw := []byte(`{"id":"x","from":"a","to":"b","chatId":"c","body":"","type":"text",
 	  "timestamp":1,"fromMe":false,"isGroup":false,"kind":"individual"}`)
@@ -47,8 +63,8 @@ func TestChatHistoryMessageLeavesAbsentFieldsEmpty(t *testing.T) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if m.Call != nil || m.Contact != nil || m.Font != nil {
-		t.Errorf("absent optionals should stay nil: call=%v contact=%v font=%v", m.Call, m.Contact, m.Font)
+	if m.Call != nil || m.Contact != nil || m.Font != nil || m.Button != nil {
+		t.Errorf("absent optionals should stay nil: call=%v contact=%v font=%v button=%v", m.Call, m.Contact, m.Font, m.Button)
 	}
 	if m.EphemeralDuration != 0 || m.BackgroundColor != "" {
 		t.Errorf("absent scalars should stay zero: ephemeral=%d bg=%q", m.EphemeralDuration, m.BackgroundColor)

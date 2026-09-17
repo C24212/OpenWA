@@ -36,7 +36,9 @@ public record ChatHistoryMessage(
     QuotedMessage quotedMessage,
     Location location,
     Order order,
-    Product product) {
+    Product product,
+    Button button,
+    List<ButtonChoice> buttons) {
 
     /** Attached media; {@code data} is absent when the payload was omitted (too large). */
     public record Media(String mimetype, String filename, String data, Boolean omitted, Long sizeBytes) {}
@@ -56,6 +58,18 @@ public record ChatHistoryMessage(
 
     /** Present on {@code product} messages only: the catalog product shared into the chat. */
     public record Product(String productId, String title, String description, String businessOwnerJid) {}
+
+    /**
+     * Present when the sender tapped a WhatsApp Business button, template quick-reply, list row, or
+     * native-flow control. Baileys only; {@code id} is the stable handle, {@code text} the visible
+     * label when WhatsApp still carries it.
+     */
+    public record Button(String id, String text) {}
+
+    /**
+     * One choice on an inbound WhatsApp Business prompt (buttons or list rows). Baileys only.
+     */
+    public record ButtonChoice(String id, String text) {}
 
     /**
      * Sender contact info. History carries {@code pushName} only; the richer fields arrive on

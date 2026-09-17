@@ -3,7 +3,7 @@
 Three-way comparison of every capability: the **Baileys library** (`@whiskeysockets/baileys`
 7.0.0-rc14), the **whatsapp-web.js library** (1.34.7), and what **OpenWA actually exposes** through
 its adapter layer and REST API — including which "supported" cells only work because OpenWA patches
-the installed library. Coverage is total: all 112 `IWhatsAppEngine` methods (29.4), **all 152
+the installed library. Coverage is total: all 113 `IWhatsAppEngine` methods (29.4), **all 152
 Baileys + 81 whatsapp-web.js library methods** (29.5), all 34 + 31 library events (29.5.4), and all
 9 install-time patches (29.3). If it exists upstream or in OpenWA, it has a row here.
 
@@ -25,7 +25,7 @@ Statuses used in the tables:
 
 Two complementary views:
 
-- **29.4 — the OpenWA contract view.** Rows are the 112 `IWhatsAppEngine` methods; use it to see
+- **29.4 — the OpenWA contract view.** Rows are the 113 `IWhatsAppEngine` methods; use it to see
   what a REST caller gets per engine. Source of truth: `src/engine/engine-capability-matrix.ts`
   (per-cell `evidence` strings cite the exact library `file:symbol` inspected).
 - **29.5 — the full engine inventory.** Rows are **every method the installed libraries expose**,
@@ -37,14 +37,14 @@ Two complementary views:
 ## 29.2 Adapter architecture
 
 OpenWA never calls a WhatsApp library directly from a controller. Every session owns one engine
-instance behind the neutral `IWhatsAppEngine` interface (112 methods +
+instance behind the neutral `IWhatsAppEngine` interface (113 methods +
 `EngineEventCallbacks`), and all modules go through it:
 
 ```mermaid
 flowchart LR
     subgraph OpenWA["OpenWA"]
         API["REST API controllers"] --> SVC["Modules / services"]
-        SVC --> IF["IWhatsAppEngine - 112 methods"]
+        SVC --> IF["IWhatsAppEngine - 113 methods"]
         IF --> WA["WhatsAppWebJsAdapter"]
         IF --> BA["BaileysAdapter"]
         SVC --> STORE["OpenWA-side stores"]
@@ -203,7 +203,7 @@ opens `if (!channel) return false;` before its try, so its `false` conflates _ch
 _WhatsApp refused_, and the adapter answers 403 for both. That distinction is ours to make in our own
 adapter and involves no library change.
 
-## 29.4 Full capability matrix — the OpenWA contract view (112 methods)
+## 29.4 Full capability matrix — the OpenWA contract view (113 methods)
 
 Legend recap: **✅** supported · **✅🔧ⁿ** supported via OpenWA patch `🔧ⁿ` (29.3) ·
 **❌ gap** adapter-gap · **❌ lib** library-limitation. Column headers carry the engine-wide
@@ -264,6 +264,7 @@ socket is caught by the transport instead. No REST route: the session watchdog p
 | `unpinMessage`        | ✅                  | ✅               | ✅           |
 | `getMessageReactions` | ❌ lib              | ✅               | ⚠️ wwjs only |
 | `votePoll`            | ❌ lib              | ✅               | ⚠️ wwjs only |
+| `clickButton`         | ✅                  | ❌ lib           | ⚠️ Baileys only |
 
 ### 29.4.4 Chats
 
@@ -395,9 +396,9 @@ answers 501.
 | `rejectCall`          | ✅                  | ✅               | ✅              |
 | `createCallLink`      | ✅                  | ✅               | ✅              |
 
-**Totals:** 112 methods → 224 adapter cells: **199 ✅, 25 ❌** (2 adapter-gaps, 23
-library-limitations, 0 uncertain) across 24 methods. From the REST caller's side: **90** methods
-work on any engine (89 fully supported + 2 store-backed status reads), **11** are Baileys-only,
+**Totals:** 113 methods → 226 adapter cells: **200 ✅, 26 ❌** (2 adapter-gaps, 24
+library-limitations, 0 uncertain) across 25 methods. From the REST caller's side: **90** methods
+work on any engine (89 fully supported + 2 store-backed status reads), **12** are Baileys-only,
 **9** are wwjs-only (the 2 store-backed rows excluded); `sendCatalog`, unavailable on both engines,
 is not exposed.
 
@@ -858,7 +859,7 @@ adapter boundary — none silently stubs.
 | `sendCatalog`           | lib   | `AnyMessageContent` (`Types/Message.d.ts:166-210`) has only `{product}` (single product); the catalog CRUD nodes (`Socket/business.js:294-362`) mutate the catalog, they don't send it.                                                                                                                                                                  |
 | `votePoll`              | lib   | No vote-send helper at all; the library only _decrypts incoming_ votes (`decryptPollVote`). Sending needs a hand-built `proto.Message.PollUpdateMessage` with HMAC-SHA256 encryption keyed by the poll creation's `messageSecret`.                                                                                                                       |
 
-### 29.6.2 wwjs adapter (13 cells)
+### 29.6.2 wwjs adapter (14 cells)
 
 | Method                     | Cause | What's missing (evidence)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | -------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -875,6 +876,7 @@ adapter boundary — none silently stubs.
 | `sendProduct`              | lib   | No outbound product content type.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `sendCatalog`              | lib   | No `Client.sendCatalog` in `index.d.ts` (0 hits).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `setGroupEphemeral`        | lib   | No disappearing-timer setter (0 hits for `ephemeral` in `index.d.ts`); only the create-time `messageTimer` option (`Client.js:2328`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `clickButton`              | lib   | No interactive button-reply send path; inbound buttons are not exposable as a clickable Client action. Baileys relays a response proto via `generateWAMessageFromContent` + `relayMessage`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## 29.7 Caveats on supported rows
 
@@ -956,9 +958,9 @@ adapter boundary — none silently stubs.
 Recomputed from `engine-capability-matrix.ts`, `upstream-surface.snapshot.json`, and a scan of the
 adapter sources — re-derive the same way when anything changes:
 
-- **112** interface methods → **224** adapter cells: **199 ✅** / **25 ❌** (2 adapter-gaps, 23
-  library-limitations, 0 uncertain), spanning **24** methods.
-- Of the 199 ✅ cells, **10 wwjs cells carry an explicit patch dependency** (4 × 🔧² status send,
+- **113** interface methods → **226** adapter cells: **200 ✅** / **26 ❌** (2 adapter-gaps, 24
+  library-limitations, 0 uncertain), spanning **25** methods.
+- Of the 200 ✅ cells, **10 wwjs cells carry an explicit patch dependency** (4 × 🔧² status send,
   1 × 🔧³ channel link preview, 1 × 🔧⁴ ready-sync, 3 × 🔧⁷ participant arity, 1 × 🔧⁹ group
   description) and one baileys cell
   does (1 × 🔧⁶ newsletter-create parse); the whole wwjs column additionally
