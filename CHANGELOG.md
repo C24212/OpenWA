@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Baileys inbound button, template quick-reply, list-row and native-flow replies arrive as `type: "text"` with a structured `button { id, text? }` on `message.received` / chat history (whatsapp-web.js still has no interactive reply fields).
 - Baileys inbound business prompts that offer buttons (or list rows) also carry `buttons: [{ id, text }, …]` on `message.received`, so choices like Sim/Não are no longer flattened away into `body` only.
 - `POST /api/sessions/:sessionId/messages/click-button` sends a structured button/list reply against a stored WhatsApp Business prompt on Baileys (whatsapp-web.js returns `501`).
+- The dashboard Chats thread renders inbound Baileys prompt `buttons` and taps them through `POST .../messages/click-button`; prompt choices are also kept in persisted message `metadata` so they survive reload.
 
 ### Changed
 
