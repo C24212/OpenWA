@@ -72,6 +72,15 @@ test('mapEngineHistoryMessage: a text message gets no media metadata', () => {
   assert.equal(mapEngineHistoryMessage(hist({ type: 'text' })).metadata, undefined);
 });
 
+test('mapEngineHistoryMessage: carries inbound prompt buttons into metadata', () => {
+  const buttons = [
+    { id: 'yes', text: 'Sim' },
+    { id: 'no', text: 'Não' },
+  ];
+  const m = mapEngineHistoryMessage(hist({ buttons }));
+  assert.deepEqual(m.metadata?.buttons, buttons);
+});
+
 test('mergeChatMessages: an engine-only message (no DB row) is included — the backfill case', () => {
   const merged = mergeChatMessages([], [mapEngineHistoryMessage(hist())]);
   assert.equal(merged.length, 1);
