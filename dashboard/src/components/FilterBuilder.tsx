@@ -24,6 +24,7 @@ interface FieldDescriptor {
 const MESSAGE_FIELDS: FieldDescriptor[] = [
   { field: 'sender', kind: 'id', operators: ['is', 'isNot'] },
   { field: 'recipient', kind: 'id', operators: ['is', 'isNot'] },
+  { field: 'chatId', kind: 'id', operators: ['is', 'isNot'] },
   { field: 'body', kind: 'text', operators: ['contains', 'equals'] },
   { field: 'type', kind: 'enum', operators: ['is', 'isNot'], enumValues: MESSAGE_TYPES },
   { field: 'isGroup', kind: 'boolean', operators: ['is'] },

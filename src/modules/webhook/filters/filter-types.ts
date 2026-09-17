@@ -100,6 +100,15 @@ export const FILTER_FIELDS: Record<string, FieldDefinition[]> = {
       resolve: data => str(data.to),
     },
     {
+      // Conversation JID (DM or group). Prefer the explicit chatId carried on received /
+      // edited / reaction / revoked payloads; fall back to `from` for older shapes where
+      // the chat is only on that field (inbound group messages often use from=@g.us).
+      field: 'chatId',
+      kind: 'id',
+      operators: ID_OPERATORS,
+      resolve: data => str(data.chatId) ?? str(data.from),
+    },
+    {
       field: 'body',
       kind: 'text',
       operators: TEXT_OPERATORS,
