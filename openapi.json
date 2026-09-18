@@ -911,6 +911,9 @@
           },
           "409": {
             "description": "The session is not waiting to be linked: the engine is still connecting, or reconnecting after a drop, so the request never reached WhatsApp. Wait for `status` to read `qr_ready` and retry. Once a code has been accepted the session moves through `authenticating` and `initializing` to `ready` and answers this until then; wait for `ready` in that case. A session that reads `ready` is already linked and answers `400` instead. One window answers this while the session still reads `qr_ready`: on the Baileys engine a socket that has begun closing stops accepting a pairing request before the status catches up, which on a silently dropped connection takes until the WebSocket's close timeout (30 s); retry, and the status follows shortly."
+          },
+          "503": {
+            "description": "The pairing code could not be generated: every attempt landed while WhatsApp Web was reloading its own page, so the request never reached WhatsApp. The condition is transient and the request is worth retrying; the last attempt's reason is carried in the message. The Baileys engine does not answer this, having no page to reload."
           }
         },
         "summary": "Request an 8-char pairing code to link via phone number (alternative to QR)",
