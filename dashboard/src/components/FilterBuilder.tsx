@@ -66,9 +66,14 @@ function ContactChipsInput({ value, onChange, chats }: ContactChipsInputProps) {
   const suggestions = useMemo(() => {
     const query = text.trim().toLowerCase();
     const chosen = new Set(value);
-    return chats
-      .filter(c => !chosen.has(c.id))
-      .filter(c => !query || c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query));
+    return (
+      chats
+        .filter(c => !chosen.has(c.id))
+        .filter(c => !query || c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query))
+        // The dropdown scrolls, so this only bounds how much of an account with up to 1000 chats is
+        // rendered on every keystroke. Typing narrows the list further.
+        .slice(0, 50)
+    );
   }, [text, chats, value]);
 
   const labelFor = (jid: string) => chats.find(c => c.id === jid)?.name ?? jid;
