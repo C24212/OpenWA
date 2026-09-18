@@ -799,7 +799,7 @@ Request an 8-char pairing code to link via phone number (alternative to QR).
 
 `status` is the lowercase session status.
 
-**Errors:** `400` validation, or session not started, or already authenticated · `401` · `403` · `404` not found · `409` session not waiting to be linked yet; wait for `status` to read `qr_ready` and retry (after a code was accepted, wait for `ready` instead). On Baileys a session that already reads `qr_ready` can still answer `409` while its socket is closing, for up to the WebSocket close timeout (30 s); that is retryable and the status follows shortly.
+**Errors:** `400` validation, or session not started, or already authenticated · `401` · `403` · `404` not found · `409` session not waiting to be linked yet; wait for `status` to read `qr_ready` and retry (after a code was accepted, wait for `ready` instead). On Baileys a session that already reads `qr_ready` can still answer `409` while its socket is closing, for up to the WebSocket close timeout (30 s); that is retryable and the status follows shortly. · `503` whatsapp-web.js only: every attempt landed while WhatsApp Web was reloading its own QR page, so the request never reached WhatsApp; retryable, and the last attempt's reason rides in the message.
 
 #### POST /api/sessions/:sessionId/presence/subscribe
 
