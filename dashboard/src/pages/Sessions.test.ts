@@ -454,6 +454,26 @@ test('a typed pairing phone number survives toggling to the QR tab and back', as
   );
 });
 
+// Nothing server-side refuses a pairing code for a number linked elsewhere, so the panel has to say
+// what it can cost before the operator types one.
+test('the phone pairing tab warns that a code can unlink an existing session', async () => {
+  const { screen, fireEvent, within } = rtl;
+  resetFetchCalls();
+  renderSessions();
+
+  await screen.findByText('new-device');
+  const qrCard = screen.getByText('new-device').closest('.session-card') as HTMLElement;
+  fireEvent.click(within(qrCard).getByRole('button', { name: 'Show QR' }));
+  await screen.findByAltText('QR');
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Link with Phone Number' }));
+
+  assert.ok(
+    screen.getByText(/can make WhatsApp unlink that device/i),
+    'the phone pairing tab offered a code with no warning',
+  );
+});
+
 test('stopping a session dismisses its own open QR modal', async () => {
   const { screen, fireEvent, within, waitFor } = rtl;
   resetFetchCalls();

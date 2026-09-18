@@ -770,6 +770,11 @@ export function Sessions() {
               // Pairing Code Content
               <div className="pairing-container" role="tabpanel">
                 {pairingError && <div className="pairing-error">{pairingError}</div>}
+                {/* The guards behind this button check the session's state, never the number: a code
+                    requested for a number linked elsewhere has been seen to unlink that device on the
+                    whatsapp-web.js engine. Shown on both engines, since the page cannot tell which one
+                    a session runs without another round-trip, and the copy names the engine. */}
+                <div className="pairing-warning">{t('sessions.pairing.relinkWarning')}</div>
 
                 {!pairingCode ? (
                   <div className="pairing-form">
