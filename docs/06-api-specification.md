@@ -299,7 +299,9 @@ in it is stored but ignored).
 ```
 
 `maxReconnectAttempts: null` means unlimited (the default); `reconnectBaseDelay` is milliseconds.
-See §5 (Database Design) for what each key does and the moment it is read.
+Both bound the gateway's own reconnect, which on Baileys covers only the reconnect after a
+logged-out close: that engine retries a transient drop internally, with a fixed 1s to 60s backoff
+and no attempt cap. See §5 (Database Design) for what each key does and the moment it is read.
 
 **Errors:** `401` missing/invalid key, or key not scoped to this session · `404` session not found
 
@@ -321,11 +323,11 @@ and therefore apply on the next start, leaving a reconnect sequence already in f
 
 **Request body** — `UpdateSessionConfigDto` (any subset; each key also accepts `null`)
 
-| Field                  | Type    | Constraints               | Description                                                        |
-| ---------------------- | ------- | ------------------------- | ------------------------------------------------------------------ |
-| `autoRejectCalls`      | boolean | —                         | Auto-reject every incoming call as soon as it rings (Baileys only) |
-| `maxReconnectAttempts` | number  | integer, 0–20             | Reconnect attempt cap (`0` disables reconnect; `null` = unlimited) |
-| `reconnectBaseDelay`   | number  | integer, 1000–300000 (ms) | Base delay of the reconnect backoff                                |
+| Field                  | Type    | Constraints               | Description                                                                                                                                                                                      |
+| ---------------------- | ------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `autoRejectCalls`      | boolean | —                         | Auto-reject every incoming call as soon as it rings (Baileys only)                                                                                                                               |
+| `maxReconnectAttempts` | number  | integer, 0–20             | Reconnect attempt cap (`0` disables reconnect; `null` = unlimited). Bounds the gateway's own reconnect: every reconnect on whatsapp-web.js, and on Baileys only the one after a logged-out close |
+| `reconnectBaseDelay`   | number  | integer, 1000–300000 (ms) | Base delay of the reconnect backoff, on the same engine scope                                                                                                                                    |
 
 ```json
 { "maxReconnectAttempts": 5 }
