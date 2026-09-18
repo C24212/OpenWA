@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- The docs and the OpenAPI field descriptions scope `maxReconnectAttempts` and `reconnectBaseDelay` to the gateway's own reconnect: on Baileys that is only the reconnect after a logged-out close, since the engine retries every other drop itself, with a fixed 1s to 60s backoff and no attempt cap ([#1651](https://github.com/rmyndharis/OpenWA/issues/1651)).
 - The docs, the README, the OpenAPI field descriptions and the dashboard's auto-reject hint mark call rejection, `autoRejectCalls` and the call outcome events as Baileys only, and `call.received` as not reliable on whatsapp-web.js ([#1118](https://github.com/rmyndharis/OpenWA/discussions/1118)). Thanks @etondeengole for the report.
 
 ### Upgrade notes (behavior changes)
@@ -143,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The amd64 image moves from Chrome for Testing 146 to 153, so every amd64 rollback to 0.23.4 or earlier crosses a browser major; the arm64 image runs the chromium Debian ships at build time, whose major can differ between releases.
 - A `LOG_LEVEL` other than `error`, `warn`, `info`, `debug` or `verbose` now stops the boot instead of logging at info.
 - Multi-node deployments run the lapsed-status correction even with `AUTO_START_SESSIONS` off, so every node needs a synced clock and, on PostgreSQL, one time zone without daylight saving (`TZ=UTC` recommended); otherwise live sessions can be marked disconnected (see `docs/13-horizontal-scaling.md`).
-- A session with an explicit `maxReconnectAttempts` now stops in `failed` once those attempts run out during an outage; before, a limit above about 6 at the default base delay was never reached and the session retried indefinitely.
+- A session with an explicit `maxReconnectAttempts` now stops in `failed` once the gateway's reconnect attempts run out during an outage; before, a limit above about 6 at the default base delay was never reached and the session retried indefinitely. On Baileys this covers only the reconnect after a logged-out close: every other drop is retried inside the engine, with its own backoff and no cap.
 - A dashboard or client signed in with a `VIEWER` key no longer receives the pairing QR over the `/events` WebSocket, matching the OPERATOR role `GET /api/sessions/{sessionId}/qr` already required.
 - Installing from source now needs Node.js 22.19 or newer; the published Docker image is unaffected.
 - Python SDK: `ChatHistoryMessage` marks the keys the contract always sends as required and narrows `type` and `kind` to literals, so a hand-built partial dict or a plain `str` assigned to either no longer type-checks.
