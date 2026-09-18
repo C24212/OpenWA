@@ -68,8 +68,7 @@ function ContactChipsInput({ value, onChange, chats }: ContactChipsInputProps) {
     const chosen = new Set(value);
     return chats
       .filter(c => !chosen.has(c.id))
-      .filter(c => !query || c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query))
-      .slice(0, 8);
+      .filter(c => !query || c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query));
   }, [text, chats, value]);
 
   const labelFor = (jid: string) => chats.find(c => c.id === jid)?.name ?? jid;
