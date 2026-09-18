@@ -100,13 +100,14 @@ export const FILTER_FIELDS: Record<string, FieldDefinition[]> = {
       resolve: data => str(data.to),
     },
     {
-      // Conversation JID (DM or group). Prefer the explicit chatId carried on received /
-      // edited / reaction / revoked payloads; fall back to `from` for older shapes where
-      // the chat is only on that field (inbound group messages often use from=@g.us).
+      // Conversation JID (DM or group). Every payload in this family carries it: `IncomingMessage`
+      // declares `chatId` required, and the edited, reaction and revoked events set it explicitly.
+      // Deliberately without a fall back to `from`, which is the sender on a DM and this session on
+      // an outbound message, so it would silently scope the filter to the wrong conversation.
       field: 'chatId',
       kind: 'id',
       operators: ID_OPERATORS,
-      resolve: data => str(data.chatId) ?? str(data.from),
+      resolve: data => str(data.chatId),
     },
     {
       field: 'body',

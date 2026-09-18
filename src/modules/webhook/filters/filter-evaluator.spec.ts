@@ -202,13 +202,13 @@ describe('evaluateFilters', () => {
       expect(evaluateFilters(f, 'message.received', msg({ chatId: '999@g.us', from: 'part@c.us' }))).toBe(false);
     });
 
-    it('falls back to from when chatId is omitted (inbound group shape)', () => {
+    // `from` is the sender on a DM and this session on an outbound message, so reading it as the
+    // conversation would scope the filter to the wrong chat. A payload without chatId matches
+    // nothing rather than guessing.
+    it('does not read from as the conversation when chatId is absent', () => {
       const f = filters({ field: 'chatId', operator: 'is', value: ['120@g.us'] });
       expect(
         evaluateFilters(f, 'message.received', msg({ from: '120@g.us', author: 'part@c.us', isGroup: true })),
-      ).toBe(true);
-      expect(
-        evaluateFilters(f, 'message.received', msg({ from: '999@g.us', author: 'part@c.us', isGroup: true })),
       ).toBe(false);
     });
 
