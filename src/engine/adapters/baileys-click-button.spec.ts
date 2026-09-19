@@ -85,6 +85,7 @@ function makeMessaging(stored: unknown = PROMPT, opts: { ephemeralExpiration?: n
       } as never),
     getStoredMessage,
     putStoredMessage,
+    rememberOwnSend: () => undefined,
     recordLidMapping: () => undefined,
     getOnMessageCreate: () => undefined,
     mapMessage: () => Promise.resolve({} as never),

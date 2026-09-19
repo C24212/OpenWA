@@ -559,25 +559,6 @@ class MessageProduct(TypedDict):
     businessOwnerJid: NotRequired[str]
 
 
-class MessageButton(TypedDict):
-    """Button/list reply block on ``message.received`` when the sender tapped a WhatsApp Business
-    control. Baileys only; ``id`` is the stable handle, ``text`` the visible label when present.
-    Not populated on the REST chat-history route.
-    """
-
-    id: str
-    text: NotRequired[str]
-
-
-class MessageButtonChoice(TypedDict):
-    """One clickable choice on an inbound WhatsApp Business prompt (buttons or list rows), carried
-    on ``message.received``. Baileys only. Not populated on the REST chat-history route.
-    """
-
-    id: str
-    text: str
-
-
 class MessageContact(TypedDict, total=False):
     """Sender contact block. History carries ``pushName`` only; the richer fields arrive on
     ``message.received`` when ``WEBHOOK_CONTACT_DETAILS`` is enabled."""

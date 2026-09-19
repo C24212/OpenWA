@@ -730,12 +730,9 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     return this.messaging.votePoll(chatId, pollMessageId, options);
   }
 
-  clickButton(
-    _chatId: string,
-    _messageId: string,
-    _buttonId: string,
-    _text?: string,
-  ): Promise<MessageResult> {
+  // whatsapp-web.js has no interactive button-reply send path; the parameters are not named so the
+  // method reads as the 501 it is, and TypeScript accepts the narrower signature for the interface.
+  clickButton(): Promise<MessageResult> {
     throw new EngineNotSupportedError('clickButton');
   }
 
