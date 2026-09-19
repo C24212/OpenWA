@@ -1010,20 +1010,27 @@ describe('MessageSendService', () => {
       });
 
       expect(mockEngine.clickButton).toHaveBeenCalledWith('test@c.us', 'PROMPT-1', 'yes', undefined);
-      type Row = { body?: string; type?: string; status?: MessageStatus; metadata?: Record<string, unknown> };
-      // Partial<Repository> hides the jest.Mock behind the overloaded signature, so the calls are read
-      // through a structural cast rather than through `.mock` on the typed method.
-      const create = repository.create as unknown as { mock: { calls: [Row][] } };
-      const created = create.mock.calls[0][0];
-      expect(created).toMatchObject({ body: 'yes', type: 'text', status: MessageStatus.PENDING });
-      expect(created.metadata).toMatchObject({
-        button: { id: 'yes', text: undefined },
-        quotedMessage: { id: 'PROMPT-1', body: '' },
-      });
-      const save = repository.save as unknown as { mock: { calls: [Row][] } };
-      const saved = save.mock.calls[save.mock.calls.length - 1][0];
-      expect(saved).toMatchObject({ body: 'Sim', status: MessageStatus.SENT });
-      expect(saved.metadata).toMatchObject({ button: { id: 'yes', text: 'Sim' } });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: 'yes',
+          type: 'text',
+          status: MessageStatus.PENDING,
+          metadata: {
+            button: { id: 'yes', text: undefined },
+            quotedMessage: { id: 'PROMPT-1', body: '' },
+          },
+        }),
+      );
+      expect(repository.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          body: 'Sim',
+          status: MessageStatus.SENT,
+          metadata: {
+            quotedMessage: { id: 'PROMPT-1', body: '' },
+            button: { id: 'yes', text: 'Sim' },
+          },
+        }),
+      );
     });
 
     it('routes an engine refusal through failSend so the pending row is marked failed', async () => {
