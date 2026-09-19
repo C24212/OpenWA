@@ -1015,25 +1015,26 @@ describe('MessageSendService', () => {
           body: 'yes',
           type: 'text',
           status: MessageStatus.PENDING,
-          metadata: expect.objectContaining({
+          metadata: {
             button: { id: 'yes', text: undefined },
             quotedMessage: { id: 'PROMPT-1', body: '' },
-          }),
+          },
         }),
       );
       expect(repository.save).toHaveBeenLastCalledWith(
         expect.objectContaining({
           body: 'Sim',
           status: MessageStatus.SENT,
-          metadata: expect.objectContaining({
+          metadata: {
+            quotedMessage: { id: 'PROMPT-1', body: '' },
             button: { id: 'yes', text: 'Sim' },
-          }),
+          },
         }),
       );
     });
 
     it('routes an engine refusal through failSend so the pending row is marked failed', async () => {
-      (mockEngine.clickButton as jest.Mock).mockRejectedValueOnce(
+      mockEngine.clickButton.mockRejectedValueOnce(
         new BadRequestException('message PROMPT-1 is not a WhatsApp Business button/list prompt that can be clicked'),
       );
 
