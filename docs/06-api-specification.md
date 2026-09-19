@@ -775,6 +775,8 @@ Returned via `transformSession`.
 
 Request an 8-char pairing code to link via phone number (alternative to QR).
 
+> ⚠️ **On the whatsapp-web.js engine, only request a code for a number you are prepared to re-link.** A request for a number that already has a linked session has been observed to end with WhatsApp revoking that device: the linked session logs a LOGOUT, its credentials are deleted, and it falls back to `qr_ready` with no phone. Nothing here refuses such a request: the guards check the session's state, never the number. The request runs inside the shared WhatsApp Web page and resets its linking mode before asking for a code, so the blast radius is the account rather than the session. Baileys was not affected in the same tests. Link by QR when a session of that number must stay up.
+
 **Auth:** API key (OPERATOR) · **Scope:** session-scoped
 
 **Path parameters**

@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- The pairing-code route, the phone-pairing example and the dashboard's phone tab warn that on whatsapp-web.js a code requested for a number that already has a linked session can end with WhatsApp unlinking that device; the capability matrix records the measurement ([#1653](https://github.com/rmyndharis/OpenWA/issues/1653)).
 - The docs and the OpenAPI field descriptions scope `maxReconnectAttempts` and `reconnectBaseDelay` to the gateway's own reconnect: on Baileys that is only the reconnect after a logged-out close, since the engine retries every other drop itself, with a fixed 1s to 60s backoff and no attempt cap ([#1651](https://github.com/rmyndharis/OpenWA/issues/1651)).
 - The docs, the README, the OpenAPI field descriptions and the dashboard's auto-reject hint mark call rejection, `autoRejectCalls` and the call outcome events as Baileys only, and `call.received` as not reliable on whatsapp-web.js ([#1118](https://github.com/rmyndharis/OpenWA/discussions/1118)). Thanks @etondeengole for the report.
 
