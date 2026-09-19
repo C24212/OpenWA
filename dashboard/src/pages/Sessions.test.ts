@@ -795,6 +795,32 @@ test('a disconnected push keeps the QR modal while the engine is still registere
   }
 });
 
+// The code on screen belongs to the connection that just dropped, so it is cleared even when the
+// modal stays: the engine reconnects and pushes a fresh one, and a dead code must not be scannable
+// in the meantime.
+test('a disconnected push blanks the displayed QR code', async () => {
+  const { screen, fireEvent, within, waitFor } = rtl;
+  resetFetchCalls();
+  window.sessionStorage.setItem('openwa_api_key', 'test-key');
+  const row: Session = { ...SESSION_QR, id: 'sess-blank-1', name: 'blanked', status: 'qr_ready', engineLoaded: true };
+  SESSIONS.push(row);
+  try {
+    renderSessions();
+
+    const card = (await screen.findByText('blanked')).closest('.session-card') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Show QR' }));
+    await screen.findByAltText('QR');
+
+    row.status = 'disconnected';
+    pushSessionStatus(row.id, 'disconnected');
+
+    await waitFor(() => assert.ok(!screen.queryByAltText('QR'), 'the dead QR code stayed on screen'));
+    assert.ok(screen.queryByRole('dialog'), 'the QR modal closed while the engine was still registered');
+  } finally {
+    SESSIONS.pop();
+  }
+});
+
 // A re-read that fails says nothing about the engine, so the modal stays.
 test('a disconnected push keeps the QR modal when the re-read fails', async () => {
   const { screen, fireEvent, within, act } = rtl;

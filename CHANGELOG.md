@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stopping, unlinking or force-killing a session announces `session.status: disconnected` after the engine is released, not while it is still tearing down, so a dashboard tab or a webhook consumer no longer learns the session is down in the one moment the API still reports its engine as loaded. On whatsapp-web.js that window lasted as long as Chromium took to close, and left an open QR modal on a dead code with the started actions still offered ([#1649](https://github.com/rmyndharis/OpenWA/issues/1649)).
+- The dashboard blanks a session's displayed QR code as soon as the session disconnects, so a code minted by a connection that is gone is never left on screen to be scanned ([#1649](https://github.com/rmyndharis/OpenWA/issues/1649)).
 - A pairing-code request whose retry budget runs out on a reloading WhatsApp Web page answers `503` instead of `500`, so a client can tell a retryable transport failure from a broken gateway ([#1654](https://github.com/rmyndharis/OpenWA/issues/1654)).
 - A re-delivery of an already-persisted ingress event is answered with the route's declared ack, the same response the first delivery received, instead of a hardcoded `200 duplicate` that bypassed the ack entirely. A provider that validates the ack no longer fails on the retry path dedup exists for ([#1638](https://github.com/rmyndharis/OpenWA/issues/1638)).
 - The `session-alive` preflight's `503` carries a `Retry-After`, so a provider that retries a 503 only when that header is present comes back instead of failing the call; the rejection writes no dedup row, so the retry is treated as a new delivery ([#1639](https://github.com/rmyndharis/OpenWA/issues/1639)).
