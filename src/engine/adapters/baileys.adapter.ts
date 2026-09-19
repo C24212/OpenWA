@@ -9,6 +9,7 @@ import { BaileysEvents } from './baileys-events';
 import { BaileysGroups } from './baileys-groups';
 import { BaileysHistory, toUnixSeconds } from './baileys-history';
 import { type BaileysEngineHost } from './baileys-host';
+import { OwnSendRegistry } from './baileys-own-sends';
 import { BaileysLifecycle } from './baileys-lifecycle';
 import { BaileysMessaging } from './baileys-messaging';
 import { BaileysStatus } from './baileys-status';
@@ -93,11 +94,6 @@ export class BaileysAdapter implements IWhatsAppEngine {
   private set sock(value: WASocket | null) {
     this.lifecycle.sock = value;
   }
-  /** Unix-seconds timestamp of the last 'open' connection.update — the events delegate's
-   *  live-vs-history discriminator, read live; the value is owned by the lifecycle delegate. */
-  private get connectedAt(): number {
-    return this.lifecycle.connectedAt;
-  }
   /** Live-call cache handle — the map is owned by the events delegate (call events + rejectCall);
    *  lifecycle teardown clears it so a late rejectCall() reports not-found on a dead socket. The
    *  adapter keeps this alias for the unmodified spec, which reads `adapter.liveCalls` via a cast. */
@@ -110,6 +106,9 @@ export class BaileysAdapter implements IWhatsAppEngine {
     return this.lifecycle.loadLib();
   }
 
+  /** Ids of the messages this session sent through the API, until each one's library echo returns. */
+  private readonly ownSends = new OwnSendRegistry();
+
   constructor(private readonly config: BaileysAdapterConfig) {
     // Isolate each session's auth state under its own subdirectory of the shared auth dir.
     this.authPath = baileysAuthDir(config.authDir, config.sessionId);
@@ -120,13 +119,7 @@ export class BaileysAdapter implements IWhatsAppEngine {
     // is added once here, not to nine per-delegate bags. Each delegate keeps its own narrow Host
     // interface, which this literal satisfies structurally - least privilege stays enforceable.
     const delegates: { events?: BaileysEvents } = {};
-    const connectedAt = (): number => this.connectedAt;
     const host: BaileysEngineHost = {
-      // An object-literal getter's `this` is the literal itself, so the live connectedAt read goes
-      // through the arrow closure above, which captures the adapter.
-      get connectedAt() {
-        return connectedAt();
-      },
       getSocket: () => this.sock!,
       getSocketOrNull: () => this.sock,
       logger: this.logger,
@@ -141,6 +134,8 @@ export class BaileysAdapter implements IWhatsAppEngine {
       recordMessage: msg => this.sessionStore.recordMessage(msg),
       recordMessageEdit: (chatId, messageId, text) => this.sessionStore.recordMessageEdit(chatId, messageId, text),
       putStoredMessage: msg => this.config.messageStore?.put(this.config.dbSessionId, msg),
+      rememberOwnSend: id => this.ownSends.remember(id),
+      consumeOwnSend: id => this.ownSends.consume(id),
       getOnMessage: () => this.callbacks.onMessage,
       getOnMessageCreate: () => this.callbacks.onMessageCreate,
       getOnMessageRevoked: () => this.callbacks.onMessageRevoked,
