@@ -548,9 +548,11 @@ function collectChoices(entries: Array<BaileysClickableChoice | undefined>): Bai
   const choices: BaileysClickableChoice[] = [];
   for (const entry of entries) {
     if (!entry) continue;
-    const id = entry.id.slice(0, BUTTON_TEXT_MAX_LENGTH);
+    // The id goes back to the business bot verbatim on a click, so it is never rewritten: an id past
+    // the cap is dropped (WhatsApp caps row ids far below it), while a long label is only trimmed.
+    const id = entry.id;
     const text = entry.text.slice(0, BUTTON_TEXT_MAX_LENGTH);
-    if (!id || !text) continue;
+    if (!id || id.length > BUTTON_TEXT_MAX_LENGTH || !text) continue;
     choices.push({ id, text, index: entry.index });
     if (choices.length >= BUTTONS_MAX_ENTRIES) break;
   }

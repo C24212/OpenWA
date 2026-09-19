@@ -633,6 +633,17 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
     expect(buttons![0].id).toBe('row_0');
   });
 
+  // A row id goes back to the business bot verbatim on a click, so an over-long one is dropped
+  // rather than rewritten into an id the bot would not recognise; only the label is trimmed.
+  it('drops a choice whose id is over the cap instead of truncating it', () => {
+    const rows = [
+      { rowId: 'r'.repeat(BUTTON_TEXT_MAX_LENGTH + 1), title: 'too long to send back' },
+      { rowId: 'ok', title: 'fine' },
+    ];
+    const buttons = extractBaileysButtons({ listMessage: { sections: [{ rows }] } }, 'listMessage');
+    expect(buttons).toEqual([{ id: 'ok', text: 'fine' }]);
+  });
+
   it('yields nothing for a non-prompt content type', () => {
     expect(extractBaileysButtons({}, 'conversation')).toBeUndefined();
     expect(extractBaileysButtons({ buttonsMessage: { buttons: [] } }, 'buttonsMessage')).toBeUndefined();
