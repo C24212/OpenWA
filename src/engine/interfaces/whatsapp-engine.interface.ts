@@ -29,6 +29,12 @@ export enum EngineStatus {
 export interface MessageResult {
   id: string;
   timestamp: number;
+  /**
+   * Display text actually sent, when it differs from the caller's input. Button clicks resolve
+   * the visible label from the stored prompt when the caller omitted `text`, so the persisted
+   * row can store that label instead of the raw `buttonId`.
+   */
+  body?: string;
 }
 
 /**
@@ -148,8 +154,11 @@ export interface IncomingMessage {
   };
   /**
    * Set on an inbound WhatsApp Business prompt that offers buttons (or list rows flattened as
-   * buttons): the choices shown to the recipient. Distinct from {@link IncomingMessage.button},
-   * which is set only when someone *taps* a choice. **Baileys only.**
+   * buttons): the choices shown to the recipient. URL/call CTAs are omitted — they are not
+   * clickable via {@link IWhatsAppEngine.clickButton} and must not masquerade as button ids.
+   * Distinct from {@link IncomingMessage.button}, which is set only when someone *taps* a choice.
+   * **Baileys only.** Capped (count and label length) so a malformed prompt cannot bloat
+   * persisted rows / webhook payloads.
    */
   buttons?: Array<{
     id: string;
@@ -1051,9 +1060,10 @@ export interface MessageOperationsCapability {
    * label when known. **Baileys only** — whatsapp-web.js has no interactive-reply send path.
    *
    * The prompt must already be in the engine message store (received while the session was live).
-   * This sends a structured response proto quoted to that message; it is not a native UI click and
-   * WhatsApp may reject or treat it differently from a phone tap. URL/call CTA buttons are not
-   * clickable this way — only quick-reply style choices and list rows.
+   * Classic `buttonsMessage` / `templateMessage` / `listMessage` prompts go through Baileys'
+   * `buttonReply` / `listReply` helpers. Native-flow `interactiveMessage` replies are unverified
+   * against a live business prompt and must not be treated as fully supported. URL/call CTA
+   * buttons are not clickable this way — only quick-reply style choices and list rows.
    */
   clickButton(chatId: string, messageId: string, buttonId: string, text?: string): Promise<MessageResult>;
 

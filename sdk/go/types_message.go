@@ -303,8 +303,6 @@ type ChatHistoryMessage struct {
 	Location      *MessageLocation  `json:"location,omitempty"`
 	Order         *MessageOrder     `json:"order,omitempty"`
 	Product       *MessageProduct   `json:"product,omitempty"`
-	Button        *MessageButton    `json:"button,omitempty"`
-	Buttons       []MessageButtonChoice `json:"buttons,omitempty"`
 }
 
 // MessageOrder is the order block on a live history message, present on order messages only: the
@@ -323,14 +321,15 @@ type MessageProduct struct {
 	BusinessOwnerJID string `json:"businessOwnerJid,omitempty"`
 }
 
-// MessageButton is the button/list reply block when the sender tapped a WhatsApp Business control.
-// Baileys only; ID is the stable handle, Text the visible label when WhatsApp still carries it.
+// MessageButton is the button/list reply block on message.received when the sender tapped a
+// WhatsApp Business control. Baileys only. Not populated on the REST chat-history route.
 type MessageButton struct {
 	ID   string `json:"id"`
 	Text string `json:"text,omitempty"`
 }
 
-// MessageButtonChoice is one choice on an inbound WhatsApp Business prompt (buttons or list rows).
+// MessageButtonChoice is one clickable choice on an inbound WhatsApp Business prompt, carried on
+// message.received. Baileys only. Not populated on the REST chat-history route.
 type MessageButtonChoice struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`

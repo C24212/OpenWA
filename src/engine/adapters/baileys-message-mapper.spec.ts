@@ -5,6 +5,9 @@ import {
   extractBaileysButtonReply,
   extractBaileysButtons,
   resolveBaileysButtonClick,
+  toBaileysButtonClickContent,
+  BUTTONS_MAX_ENTRIES,
+  BUTTON_TEXT_MAX_LENGTH,
   extractBaileysCommerce,
   extractBaileysContext,
   isBaileysCatalogShare,
@@ -564,7 +567,14 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
       extractBaileysButtons(
         {
           listMessage: {
-            sections: [{ rows: [{ rowId: 'ship_express', title: 'Express' }, { rowId: 'ship_std', title: 'Standard' }] }],
+            sections: [
+              {
+                rows: [
+                  { rowId: 'ship_express', title: 'Express' },
+                  { rowId: 'ship_std', title: 'Standard' },
+                ],
+              },
+            ],
           },
         },
         'listMessage',
@@ -575,6 +585,54 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
     ]);
   });
 
+  it('extracts templateMessage quick-replies and drops url/call CTAs', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          templateMessage: {
+            hydratedTemplate: {
+              hydratedButtons: [
+                { index: 1, urlButton: { url: 'https://pay.example', displayText: 'Pay now' } },
+                { index: 2, quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+                { index: 3, callButton: { phoneNumber: '+15551212', displayText: 'Call us' } },
+              ],
+            },
+          },
+        },
+        'templateMessage',
+      ),
+    ).toEqual([{ id: 'yes', text: 'Sim' }]);
+  });
+
+  it('drops native-flow CTA names so published buttons agree with the click allowlist', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          interactiveMessage: {
+            nativeFlowMessage: {
+              buttons: [
+                { name: 'cta_url', buttonParamsJson: JSON.stringify({ id: 'docs', display_text: 'Docs' }) },
+                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ id: 'yes', display_text: 'Sim' }) },
+              ],
+            },
+          },
+        },
+        'interactiveMessage',
+      ),
+    ).toEqual([{ id: 'yes', text: 'Sim' }]);
+  });
+
+  it('caps the number of choices and the length of each label', () => {
+    const rows = Array.from({ length: BUTTONS_MAX_ENTRIES + 5 }, (_, i) => ({
+      rowId: `row_${i}`,
+      title: 'x'.repeat(BUTTON_TEXT_MAX_LENGTH + 10),
+    }));
+    const buttons = extractBaileysButtons({ listMessage: { sections: [{ rows }] } }, 'listMessage');
+    expect(buttons).toHaveLength(BUTTONS_MAX_ENTRIES);
+    expect(buttons![0].text).toHaveLength(BUTTON_TEXT_MAX_LENGTH);
+    expect(buttons![0].id).toBe('row_0');
+  });
+
   it('yields nothing for a non-prompt content type', () => {
     expect(extractBaileysButtons({}, 'conversation')).toBeUndefined();
     expect(extractBaileysButtons({ buttonsMessage: { buttons: [] } }, 'buttonsMessage')).toBeUndefined();
@@ -582,7 +640,7 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
 });
 
 describe('resolveBaileysButtonClick (API click against a stored prompt)', () => {
-  it('builds a buttonsResponseMessage for a classic buttonsMessage prompt', () => {
+  it('builds a plain buttonReply for a classic buttonsMessage prompt', () => {
     const result = resolveBaileysButtonClick(
       {
         buttonsMessage: {
@@ -601,12 +659,9 @@ describe('resolveBaileysButtonClick (API click against a stored prompt)', () => 
         id: 'yes',
         text: 'Sim',
         index: 0,
-        message: {
-          buttonsResponseMessage: {
-            selectedButtonId: 'yes',
-            selectedDisplayText: 'Sim',
-            type: 1,
-          },
+        content: {
+          buttonReply: { displayText: 'Sim', id: 'yes', index: 0 },
+          type: 'plain',
         },
       },
     });
@@ -646,12 +701,9 @@ describe('resolveBaileysButtonClick (API click against a stored prompt)', () => 
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.payload.message).toEqual({
-        templateButtonReplyMessage: {
-          selectedId: 'yes',
-          selectedDisplayText: 'Sim',
-          selectedIndex: 0,
-        },
+      expect(result.payload.content).toEqual({
+        buttonReply: { displayText: 'Sim', id: 'yes', index: 1 },
+        type: 'template',
       });
     }
     expect(
@@ -672,6 +724,88 @@ describe('resolveBaileysButtonClick (API click against a stored prompt)', () => 
         'docs',
       ),
     ).toEqual({ ok: false, error: 'not_a_prompt' });
+  });
+
+  it('uses the hydrated template button index, not the filtered-list offset', () => {
+    const result = resolveBaileysButtonClick(
+      {
+        templateMessage: {
+          hydratedTemplate: {
+            hydratedButtons: [
+              { index: 1, urlButton: { url: 'https://pay.example', displayText: 'Pay now' } },
+              { index: 2, quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+            ],
+          },
+        },
+      },
+      'templateMessage',
+      'yes',
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.index).toBe(2);
+      expect(result.payload.content).toEqual({
+        buttonReply: { displayText: 'Sim', id: 'yes', index: 2 },
+        type: 'template',
+      });
+    }
+  });
+
+  it('builds a listReply for a listMessage prompt', () => {
+    const result = resolveBaileysButtonClick(
+      {
+        listMessage: {
+          sections: [
+            {
+              rows: [
+                { rowId: 'ship_express', title: 'Express' },
+                { rowId: 'ship_std', title: 'Standard' },
+              ],
+            },
+          ],
+        },
+      },
+      'listMessage',
+      'ship_std',
+    );
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        id: 'ship_std',
+        text: 'Standard',
+        index: 1,
+        content: {
+          listReply: {
+            title: 'Standard',
+            listType: 1,
+            singleSelectReply: { selectedRowId: 'ship_std' },
+          },
+        },
+      },
+    });
+  });
+
+  it('disambiguates duplicate list row ids by the caller-supplied text', () => {
+    const prompt = {
+      listMessage: {
+        sections: [{ rows: [{ rowId: 'same', title: 'Morning' }] }, { rows: [{ rowId: 'same', title: 'Evening' }] }],
+      },
+    };
+    const evening = resolveBaileysButtonClick(prompt, 'listMessage', 'same', 'Evening');
+    expect(evening.ok).toBe(true);
+    if (evening.ok) {
+      expect(evening.payload.text).toBe('Evening');
+      expect(evening.payload.index).toBe(1);
+    }
+  });
+});
+
+describe('toBaileysButtonClickContent', () => {
+  it('uses the plain buttonReply helper for buttonsMessage', () => {
+    expect(toBaileysButtonClickContent('buttonsMessage', 'yes', 'Sim', 0)).toEqual({
+      buttonReply: { displayText: 'Sim', id: 'yes', index: 0 },
+      type: 'plain',
+    });
   });
 });
 

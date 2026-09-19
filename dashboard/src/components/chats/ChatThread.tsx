@@ -409,14 +409,14 @@ function ChatThread({
                   {/* Inbound business prompt choices — tap calls POST .../messages/click-button. */}
                   {!isMe && !isRevoked && !isMasked && (msg.metadata?.buttons?.length ?? 0) > 0 && (
                     <div className="message-prompt-buttons" role="group" aria-label={t('chats.promptButtons')}>
-                      {msg.metadata!.buttons!.map(btn => {
+                      {msg.metadata!.buttons!.map((btn, idx) => {
                         const clickKey = msg.waMessageId || msg.id;
                         const state = buttonClick[clickKey];
                         const loading = state?.loadingId === btn.id;
                         const disabled = Boolean(state?.loadingId || state?.done);
                         return (
                           <button
-                            key={btn.id}
+                            key={`${idx}:${btn.id}`}
                             type="button"
                             className={`message-prompt-button${state?.selectedId === btn.id ? ' selected' : ''}${state?.done ? ' answered' : ''}`}
                             disabled={disabled}

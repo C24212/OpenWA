@@ -360,8 +360,6 @@ export interface EngineHistoryMessage {
   order?: { orderId: string; token?: string };
   /** Present on `product` messages only: the catalog product shared into the chat. */
   product?: { productId: string; title?: string; description?: string; businessOwnerJid?: string };
-  /** Business prompt choices (Baileys). Distinct from a button *reply* tap. */
-  buttons?: Array<{ id: string; text: string }>;
 }
 
 // Mirrors the backend engine Channel / ChannelMessage (GET /sessions/:id/channels[/:id/messages]).
@@ -1084,10 +1082,7 @@ export const messageApi = {
    * Tap a choice on an inbound business button/list prompt (Baileys only).
    * `messageId` is the prompt's WhatsApp id; `buttonId` is `buttons[].id`.
    */
-  clickButton: (
-    sessionId: string,
-    data: { chatId: string; messageId: string; buttonId: string; text?: string },
-  ) =>
+  clickButton: (sessionId: string, data: { chatId: string; messageId: string; buttonId: string; text?: string }) =>
     request<MessageResponse>(`/sessions/${sessionId}/messages/click-button`, {
       method: 'POST',
       body: JSON.stringify(data),

@@ -307,12 +307,13 @@ export class ClickButtonDto {
   buttonId!: string;
 
   @ApiPropertyOptional({
-    description:
-      'Visible label of the choice. When omitted, resolved from the stored prompt; falls back to buttonId.',
+    description: 'Visible label of the choice. When omitted, resolved from the stored prompt; falls back to buttonId.',
+    maxLength: MESSAGE_TEXT_MAX_LENGTH,
   })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @MaxLength(MESSAGE_TEXT_MAX_LENGTH)
   text?: string;
 }
 

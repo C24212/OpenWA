@@ -28,6 +28,7 @@ import {
   patchMatchingMessage,
   byMessageId,
   getMediaSrc,
+  liveMessageMetadata,
   type ChatMessageView,
   type MessageMedia,
 } from '../utils/chatMessages';
@@ -373,12 +374,7 @@ export function Chats() {
         status: 'sent',
         timestamp: newMsg.timestamp,
         createdAt: new Date(newMsg.timestamp * 1000).toISOString(),
-        metadata: newMsg.metadata || {
-          media: newMsg.media,
-          quotedMessage: newMsg.quotedMessage,
-          call: newMsg.call,
-          buttons: newMsg.buttons,
-        },
+        metadata: liveMessageMetadata(newMsg),
         kind: newMsg.kind,
       };
 

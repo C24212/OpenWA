@@ -366,8 +366,10 @@ export class MessageController {
     summary: 'Click a button on a WhatsApp Business prompt (Baileys only)',
     description:
       'Sends a structured button/list reply quoted to a previously received prompt. Not a native UI ' +
-      'tap — WhatsApp may reject or treat it differently. whatsapp-web.js returns 501. URL/call CTA ' +
-      'buttons cannot be clicked this way.',
+      'tap — WhatsApp may reject or treat it differently. Classic button/template/list prompts are ' +
+      'supported; native-flow interactiveMessage replies are unverified. whatsapp-web.js returns 501. ' +
+      'URL/call CTA buttons cannot be clicked this way. The prompt must still be in the engine store ' +
+      '(a reloaded bubble can render choices from persisted metadata and then 404).',
   })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiResponse({
@@ -377,16 +379,13 @@ export class MessageController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Session not active, prompt is not clickable, or buttonId is not among its choices',
+    description:
+      'Session not active, prompt is not clickable, buttonId is not among its choices, or recipient unreachable',
   })
   @ApiResponse({ status: 404, description: MESSAGE_NOT_FOUND_404 })
   @ApiResponse({ status: 501, description: ENGINE_NOT_SUPPORTED_501 })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
-  @ApiResponse({ status: 400, description: RECIPIENT_UNREACHABLE_400 })
-  async clickButton(
-    @Param('sessionId') sessionId: string,
-    @Body() dto: ClickButtonDto,
-  ): Promise<MessageResponseDto> {
+  async clickButton(@Param('sessionId') sessionId: string, @Body() dto: ClickButtonDto): Promise<MessageResponseDto> {
     return this.messageService.clickButton(sessionId, dto);
   }
 

@@ -34,7 +34,6 @@ export function mapEngineHistoryMessage(h: EngineHistoryMessage): ChatMessage {
       }
       if (h.quotedMessage) metadata.quotedMessage = h.quotedMessage;
       if (h.call) metadata.call = h.call;
-      if (h.buttons?.length) metadata.buttons = h.buttons;
       return Object.keys(metadata).length > 0 ? metadata : undefined;
     })(),
   };
@@ -138,6 +137,27 @@ export interface ChatMessageView extends ChatMessage {
     call?: { video: boolean; missed: boolean };
     buttons?: Array<{ id: string; text: string }>;
   };
+}
+
+/**
+ * Metadata for a live `message.received` / `message.sent` WS payload. Prompt `buttons` arrive
+ * top-level on that event (the history route never populates them) and are folded here so the
+ * thread renders from `metadata.buttons`, matching persisted DB rows.
+ */
+export function liveMessageMetadata(msg: {
+  media?: MessageMedia;
+  quotedMessage?: { id: string; body: string };
+  call?: { video: boolean; missed: boolean };
+  buttons?: Array<{ id: string; text: string }>;
+  metadata?: ChatMessageView['metadata'];
+}): ChatMessageView['metadata'] {
+  if (msg.metadata) return msg.metadata;
+  const metadata: NonNullable<ChatMessageView['metadata']> = {};
+  if (msg.media) metadata.media = msg.media;
+  if (msg.quotedMessage) metadata.quotedMessage = msg.quotedMessage;
+  if (msg.call) metadata.call = msg.call;
+  if (msg.buttons?.length) metadata.buttons = msg.buttons;
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 // Delivery ticks only ADVANCE, never regress. Live websocket events (incl. a replayed message.sent on

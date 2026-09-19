@@ -254,16 +254,16 @@ socket is caught by the transport instead. No REST route: the session watchdog p
 
 ### 29.4.3 Message management
 
-| Method                | Baileys adapter 🔧⁵ | wwjs adapter 🔧¹ | OpenWA REST  |
-| --------------------- | ------------------- | ---------------- | ------------ |
-| `editMessage`         | ✅                  | ✅               | ✅           |
-| `deleteMessage`       | ✅                  | ✅               | ✅           |
-| `reactToMessage`      | ✅                  | ✅               | ✅           |
-| `starMessage`         | ✅                  | ✅               | ✅           |
-| `pinMessage`          | ✅                  | ✅               | ✅           |
-| `unpinMessage`        | ✅                  | ✅               | ✅           |
-| `getMessageReactions` | ❌ lib              | ✅               | ⚠️ wwjs only |
-| `votePoll`            | ❌ lib              | ✅               | ⚠️ wwjs only |
+| Method                | Baileys adapter 🔧⁵ | wwjs adapter 🔧¹ | OpenWA REST     |
+| --------------------- | ------------------- | ---------------- | --------------- |
+| `editMessage`         | ✅                  | ✅               | ✅              |
+| `deleteMessage`       | ✅                  | ✅               | ✅              |
+| `reactToMessage`      | ✅                  | ✅               | ✅              |
+| `starMessage`         | ✅                  | ✅               | ✅              |
+| `pinMessage`          | ✅                  | ✅               | ✅              |
+| `unpinMessage`        | ✅                  | ✅               | ✅              |
+| `getMessageReactions` | ❌ lib              | ✅               | ⚠️ wwjs only    |
+| `votePoll`            | ❌ lib              | ✅               | ⚠️ wwjs only    |
 | `clickButton`         | ✅                  | ❌ lib           | ⚠️ Baileys only |
 
 ### 29.4.4 Chats
@@ -876,12 +876,19 @@ adapter boundary — none silently stubs.
 | `sendProduct`              | lib   | No outbound product content type.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `sendCatalog`              | lib   | No `Client.sendCatalog` in `index.d.ts` (0 hits).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `setGroupEphemeral`        | lib   | No disappearing-timer setter (0 hits for `ephemeral` in `index.d.ts`); only the create-time `messageTimer` option (`Client.js:2328`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `clickButton`              | lib   | No interactive button-reply send path; inbound buttons are not exposable as a clickable Client action. Baileys relays a response proto via `generateWAMessageFromContent` + `relayMessage`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `clickButton`              | lib   | No interactive button-reply send path; inbound buttons are not exposable as a clickable Client action. Baileys uses `sendMessage({buttonReply})` / `sendMessage({listReply})` for classic prompts. Native-flow `interactiveMessage` replies are unverified.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## 29.7 Caveats on supported rows
 
 ✅ means works end-to-end — but these rows carry behavioral differences worth knowing:
 
+- **`clickButton` (Baileys) — native-flow is unverified.** Classic `buttonsMessage` /
+  `templateMessage` / `listMessage` prompts go through Baileys' `buttonReply` / `listReply`
+  helpers. A native-flow `interactiveMessage` prompt is answered with the same template
+  `buttonReply` shape; Baileys also has `InteractiveResponseMessage.nativeFlowResponseMessage`,
+  which this adapter does not construct. Until a live business native-flow prompt confirms
+  what the server accepts, do not treat that arm as fully supported. URL/call CTAs are omitted
+  from inbound `buttons[]` and cannot be clicked.
 - **`postTextStatus` / `postImageStatus` / `postVideoStatus` / `postVoiceStatus` (wwjs).**
   whatsapp-web.js has no status-recipient argument, so `StatusPostOptions.recipients` is **not
   honored** — the post broadcasts to the account's status-privacy audience (a one-time warning is

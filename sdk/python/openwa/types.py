@@ -560,15 +560,19 @@ class MessageProduct(TypedDict):
 
 
 class MessageButton(TypedDict):
-    """Button/list reply block on a live history message when the sender tapped a WhatsApp Business
-    control. Baileys only; ``id`` is the stable handle, ``text`` the visible label when present."""
+    """Button/list reply block on ``message.received`` when the sender tapped a WhatsApp Business
+    control. Baileys only; ``id`` is the stable handle, ``text`` the visible label when present.
+    Not populated on the REST chat-history route.
+    """
 
     id: str
     text: NotRequired[str]
 
 
 class MessageButtonChoice(TypedDict):
-    """One choice on an inbound WhatsApp Business prompt (buttons or list rows). Baileys only."""
+    """One clickable choice on an inbound WhatsApp Business prompt (buttons or list rows), carried
+    on ``message.received``. Baileys only. Not populated on the REST chat-history route.
+    """
 
     id: str
     text: str
@@ -624,8 +628,6 @@ ChatHistoryMessage = TypedDict(
         "location": NotRequired[MessageLocation],
         "order": NotRequired[MessageOrder],
         "product": NotRequired[MessageProduct],
-        "button": NotRequired[MessageButton],
-        "buttons": NotRequired[list[MessageButtonChoice]],
     },
 )
 

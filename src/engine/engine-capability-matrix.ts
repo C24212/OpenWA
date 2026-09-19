@@ -422,7 +422,7 @@ export const CURATED_CAPABILITY_EXCEPTIONS: Record<string, MethodCapability> = {
     wwjs: { status: 'not-available', rootCause: 'library-limitation' },
     baileys: { status: 'supported' },
     evidence:
-      'wwjs has no interactive button-reply send path; baileys relays a buttonsResponseMessage / templateButtonReplyMessage / listResponseMessage / interactiveResponseMessage via generateWAMessageFromContent + relayMessage, quoting the stored prompt',
+      'wwjs has no interactive button-reply send path; baileys sendMessage({buttonReply,type}) / sendMessage({listReply}) for buttonsMessage, templateMessage and listMessage (Types/Message.d.ts ButtonReplyInfo / listReply; Utils/messages.js). Native-flow interactiveMessage has no helper and is unverified — the adapter sends a template buttonReply, not InteractiveResponseMessage, and must not be advertised as fully supported until a live business native-flow prompt confirms the server accepts it',
   },
   unpinMessage: {
     wwjs: { status: 'supported' },

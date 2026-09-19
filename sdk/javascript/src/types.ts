@@ -609,16 +609,6 @@ export interface ChatHistoryMessage {
   order?: { orderId: string; token?: string };
   /** Present on `product` messages only: the catalog product shared into the chat. */
   product?: { productId: string; title?: string; description?: string; businessOwnerJid?: Jid };
-  /**
-   * Present when the sender tapped a WhatsApp Business button, template quick-reply, list row, or
-   * native-flow control. **Baileys only.**
-   */
-  button?: { id: string; text?: string };
-  /**
-   * Present on an inbound WhatsApp Business prompt that offers buttons (or list rows). Distinct from
-   * `button`, which is set only when someone taps a choice. **Baileys only.**
-   */
-  buttons?: Array<{ id: string; text: string }>;
 }
 
 /** Paginated payload returned by `GET /sessions/:id/messages`. */

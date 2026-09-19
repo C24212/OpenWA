@@ -539,6 +539,15 @@ export class MessageSendService {
     } catch (error) {
       return this.failSend(sessionId, 'click-button', message, finalDto, error);
     }
+    // The engine resolves the visible label from the stored prompt when the caller omitted `text`.
+    // Persist that label (not the raw buttonId) so the row agrees with what went on the wire.
+    if (result.body) {
+      message.body = result.body;
+      message.metadata = {
+        ...(message.metadata ?? {}),
+        button: { id: finalDto.buttonId, text: result.body },
+      };
+    }
     return this.persistSentState(message, result);
   }
 

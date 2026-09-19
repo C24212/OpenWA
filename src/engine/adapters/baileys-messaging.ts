@@ -477,8 +477,13 @@ export class BaileysMessaging {
   }
 
   /**
-   * Send a structured button/list reply against a stored business prompt. Relays the response proto
-   * (official Baileys has no buttonReply helper) quoted to the prompt message.
+   * Send a structured button/list reply against a stored business prompt.
+   *
+   * Classic prompts (`buttonsMessage` / `templateMessage` / `listMessage`) go through Baileys'
+   * `buttonReply` / `listReply` helpers via {@link sendContent}, so the send inherits
+   * `withEphemeral`, the store put and the own-send echo. Native-flow `interactiveMessage` has no
+   * helper; it uses the template `buttonReply` shape, which is unverified against a live business
+   * native-flow prompt.
    */
   async clickButton(chatId: string, messageId: string, buttonId: string, text?: string): Promise<MessageResult> {
     this.host.ensureReady();
@@ -500,40 +505,8 @@ export class BaileysMessaging {
       );
     }
 
-    const jid = await this.toDeliverableJid(chatId);
-    const generated = b.generateWAMessageFromContent(
-      jid,
-      // Structural builder — cast at the relay boundary onto Baileys' proto.IMessage.
-      resolved.payload.message as Parameters<typeof b.generateWAMessageFromContent>[1],
-      {
-        quoted,
-        // MessageGenerationOptionsFromContent requires userJid: string (not optional).
-        userJid: this.host.normalizedSelfJid() || jid,
-      },
-    );
-    if (!generated?.message || !generated.key?.id) {
-      throw new InternalServerErrorException('Failed to build button-click message');
-    }
-
-    await this.sock().relayMessage(jid, generated.message, { messageId: generated.key.id });
-
-    // Stamp fromMe so the store / own-send echo treat this like any other API send.
-    const sent: WAMessage = {
-      ...generated,
-      key: { ...generated.key, fromMe: true, remoteJid: jid },
-      messageTimestamp: generated.messageTimestamp ?? Math.floor(Date.now() / 1000),
-    };
-    void this.host.putStoredMessage(sent)?.catch(err =>
-      this.host.logger.warn('Failed to persist button-click message to store', {
-        error: err instanceof Error ? err.message : String(err),
-      }),
-    );
-    void this.emitOwnSendEcho(sent);
-
-    return {
-      id: sent.key.id ?? '',
-      timestamp: this.host.toUnixSeconds(sent.messageTimestamp),
-    };
+    const result = await this.sendContent(chatId, resolved.payload.content as AnyMessageContent, { quoted });
+    return { ...result, body: resolved.payload.text };
   }
 
   async forwardMessage(fromChatId: string, toChatId: string, messageId: string): Promise<MessageResult> {
