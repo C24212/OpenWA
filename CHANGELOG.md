@@ -12,8 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Baileys inbound button, template quick-reply, list-row and native-flow replies arrive as `type: "text"` with a structured `button { id, text? }` on `message.received` (whatsapp-web.js still has no interactive reply fields). The REST chat-history route is whatsapp-web.js only and does not carry these fields. Thanks @gabrielmmoraes1999.
 - Baileys inbound business prompts that offer clickable buttons (or list rows) also carry `buttons: [{ id, text }, …]` on `message.received` (URL/call CTAs are omitted — they cannot be clicked), so choices like Sim/Não are no longer flattened away into `body` only. Thanks @gabrielmmoraes1999.
 - `POST /api/sessions/:sessionId/messages/click-button` sends a structured button/list reply against a stored WhatsApp Business prompt on Baileys (whatsapp-web.js returns `501`). Classic `buttonsMessage` / `templateMessage` / `listMessage` prompts are supported; native-flow `interactiveMessage` replies are unverified. Thanks @gabrielmmoraes1999.
+- The dashboard Chats thread shows a quote preview and call detail on history-loaded messages, which previously rendered on live messages only. Thanks @gabrielmmoraes1999.
 - The dashboard Chats thread renders inbound Baileys prompt `buttons` and taps them through `POST .../messages/click-button`; prompt choices are also kept in persisted message `metadata` so they survive reload for rendering. Clicking still requires the prompt to be in the engine store — an evicted prompt 404s. Thanks @gabrielmmoraes1999.
-- Webhook and automation filters accept a `chatId` condition, so a webhook can be scoped to specific groups or chats instead of only to a sender ([#1634](https://github.com/rmyndharis/OpenWA/issues/1634)). Thanks @krishshah9944.
+- Webhook and automation filters accept a `chatId` condition, so a webhook can be scoped to specific groups or chats instead of only to a sender ([#1634](https://github.com/rmyndharis/OpenWA/issues/1634)). Thanks @krishshah9944 and @bhavyachopra99.
 - The dashboard Templates list has a delete button on each row, so a template can be deleted without opening it in the editor first. Like the editor's delete button, it shows only for keys that can write templates. Thanks @C24212.
 - On the dashboard Chats page, Escape closes the open chat, channel or status viewer and returns to the list. It leaves the key alone while a dialog, a menu or the media viewer is open, since those handle Escape themselves. Thanks @C24212.
 
@@ -78,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The pairing-code route, the phone-pairing example and the dashboard's phone tab warn that on whatsapp-web.js a code requested for a number that already has a linked session can end with WhatsApp unlinking that device; the capability matrix records the measurement ([#1653](https://github.com/rmyndharis/OpenWA/issues/1653)).
 - The docs and the OpenAPI field descriptions scope `maxReconnectAttempts` and `reconnectBaseDelay` to the gateway's own reconnect: on Baileys that is only the reconnect after a logged-out close, since the engine retries every other drop itself, with a fixed 1s to 60s backoff and no attempt cap ([#1651](https://github.com/rmyndharis/OpenWA/issues/1651)).
 - The docs, the README, the OpenAPI field descriptions and the dashboard's auto-reject hint mark call rejection, `autoRejectCalls` and the call outcome events as Baileys only, and `call.received` as not reliable on whatsapp-web.js ([#1118](https://github.com/rmyndharis/OpenWA/discussions/1118)). Thanks @etondeengole for the report.
+
+### Dependencies
+
+- `socks` (^2.8.7) is now a direct dependency: the undici dispatcher that routes a caller-supplied URL fetch through a session's SOCKS proxy speaks the protocol itself, since undici ships no SOCKS4 transport and its experimental SOCKS5 agent hands the proxy percent-encoded credentials.
 
 ### Upgrade notes (behavior changes)
 
