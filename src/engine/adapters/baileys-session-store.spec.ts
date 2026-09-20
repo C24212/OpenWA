@@ -581,25 +581,37 @@ describe('BaileysSessionStore', () => {
       return new BaileysSessionStore(lidStore);
     };
 
-    it('evicts the oldest contact once over the cap; the miss reads as "unknown"', () => {
+    it('evicts the oldest unsaved contact once over the cap; the miss reads as "unknown"', () => {
       const s = storeWithCap('2');
-      s.upsertContacts([{ id: '628111@s.whatsapp.net', name: 'A' }]);
-      s.upsertContacts([{ id: '628222@s.whatsapp.net', name: 'B' }]);
-      s.upsertContacts([{ id: '628333@s.whatsapp.net', name: 'C' }]);
-      expect(s.listContacts()).toHaveLength(2);
-      expect(s.findContact('628111@s.whatsapp.net')).toBeNull(); // evicted — same as never seen
-      expect(s.findContact('628222@s.whatsapp.net')?.name).toBe('B');
-      expect(s.findContact('628333@s.whatsapp.net')?.name).toBe('C');
+      s.upsertContacts([{ id: '628111@s.whatsapp.net', notify: 'A' }]);
+      s.upsertContacts([{ id: '628222@s.whatsapp.net', notify: 'B' }]);
+      s.upsertContacts([{ id: '628333@s.whatsapp.net', notify: 'C' }]);
+      expect(s.findContact('628111@s.whatsapp.net')).toBeNull(); // evicted, same as never seen
+      expect(s.findContact('628222@s.whatsapp.net')?.pushName).toBe('B');
+      expect(s.findContact('628333@s.whatsapp.net')?.pushName).toBe('C');
     });
 
     it('treats a read as usage: a refreshed entry survives while a stale one is evicted (LRU)', () => {
       const s = storeWithCap('2');
-      s.upsertContacts([{ id: '628111@s.whatsapp.net', name: 'A' }]);
-      s.upsertContacts([{ id: '628222@s.whatsapp.net', name: 'B' }]);
-      expect(s.findContact('628111@s.whatsapp.net')?.name).toBe('A'); // refresh A
-      s.upsertContacts([{ id: '628333@s.whatsapp.net', name: 'C' }]); // evicts B, not A
-      expect(s.findContact('628111@s.whatsapp.net')?.name).toBe('A');
+      s.upsertContacts([{ id: '628111@s.whatsapp.net', notify: 'A' }]);
+      s.upsertContacts([{ id: '628222@s.whatsapp.net', notify: 'B' }]);
+      expect(s.findContact('628111@s.whatsapp.net')?.pushName).toBe('A'); // refresh A
+      s.upsertContacts([{ id: '628333@s.whatsapp.net', notify: 'C' }]); // evicts B, not A
+      expect(s.findContact('628111@s.whatsapp.net')?.pushName).toBe('A');
       expect(s.findContact('628222@s.whatsapp.net')).toBeNull();
+    });
+
+    it('keeps the saved address book when unsaved peers overflow the cap', () => {
+      // The two populations share one map: a handful of contacts the account saved, and every peer
+      // seen once in a group or a broadcast. Only the second grows without limit, and it used to
+      // evict the first, emptying GET /contacts on a busy session.
+      const s = storeWithCap('3');
+      s.upsertContacts([{ id: '628111@s.whatsapp.net', name: 'Alice' }]);
+      for (let i = 0; i < 50; i++) {
+        s.upsertContacts([{ id: `62${9000 + i}@s.whatsapp.net`, notify: `peer ${i}` }]);
+      }
+      expect(s.findContact('628111@s.whatsapp.net')?.name).toBe('Alice');
+      expect(s.listContacts()).toEqual([expect.objectContaining({ name: 'Alice' })]);
     });
 
     it('bounds chats: listChats stays at the cap and drops the oldest conversation', () => {
@@ -678,16 +690,17 @@ describe('BaileysSessionStore', () => {
 
     it('falls back to the 5000 default for a garbage override', () => {
       const s = storeWithCap('not-a-number');
-      s.upsertContacts(Array.from({ length: 5001 }, (_, i) => ({ id: `62${100000 + i}@s.whatsapp.net`, name: 'x' })));
-      expect(s.listContacts()).toHaveLength(5000);
+      // Unsaved peers: the cap governs exactly this population (a saved contact is pinned).
+      s.upsertContacts(Array.from({ length: 5001 }, (_, i) => ({ id: `62${100000 + i}@s.whatsapp.net`, notify: 'x' })));
       expect(s.findContact('62100000@s.whatsapp.net')).toBeNull(); // the oldest went first
       expect(s.findContact('62105000@s.whatsapp.net')).not.toBeNull();
     });
 
     it('treats a blank override as unset, not as 0 (unbounded)', () => {
       const s = storeWithCap('');
-      s.upsertContacts(Array.from({ length: 5001 }, (_, i) => ({ id: `62${100000 + i}@s.whatsapp.net`, name: 'x' })));
-      expect(s.listContacts()).toHaveLength(5000);
+      s.upsertContacts(Array.from({ length: 5001 }, (_, i) => ({ id: `62${100000 + i}@s.whatsapp.net`, notify: 'x' })));
+      expect(s.findContact('62100000@s.whatsapp.net')).toBeNull();
+      expect(s.findContact('62105000@s.whatsapp.net')).not.toBeNull();
     });
   });
 });

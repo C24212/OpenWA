@@ -20,11 +20,19 @@ export const SESSION_STORE_MAP_CAP_DEFAULT = 5000;
  * Insertion-ordered Map with an LRU cap, the same discipline as LidMappingStoreService: a read or
  * write re-inserts the key at the most-recent end, and a set evicts the least-recently-used entry
  * while over `max`. `max = 0` means unbounded.
+ *
+ * `pinned` marks entries an eviction must skip while any unpinned entry is older. It exists for the
+ * contacts map, where two populations share one cap: the account's own address book, which the
+ * operator curated and which the API reports, and a much larger stream of peers seen once in a group
+ * or a broadcast. Without it the second evicts the first.
  */
 class LruMap<K, V> {
   private readonly map = new Map<K, V>();
 
-  constructor(private readonly max: number) {}
+  constructor(
+    private readonly max: number,
+    private readonly pinned?: (value: V) => boolean,
+  ) {}
 
   has(key: K): boolean {
     return this.map.has(key);
@@ -47,12 +55,29 @@ class LruMap<K, V> {
       return;
     }
     while (this.map.size > this.max) {
-      const oldest = this.map.keys().next().value;
-      if (oldest === undefined) {
-        break;
+      const victim = this.oldestEvictable();
+      if (victim === undefined) {
+        break; // every entry is pinned: keep them all rather than drop curated data
       }
-      this.map.delete(oldest);
+      this.map.delete(victim);
     }
+  }
+
+  /**
+   * The least-recently-used entry an eviction may take, or undefined when every entry is pinned.
+   * Without a `pinned` predicate this is the map head, as before.
+   */
+  private oldestEvictable(): K | undefined {
+    if (!this.pinned) {
+      const oldest = this.map.keys().next().value;
+      return oldest;
+    }
+    for (const [key, value] of this.map) {
+      if (!this.pinned(value)) {
+        return key;
+      }
+    }
+    return undefined;
   }
 
   values(): IterableIterator<V> {
@@ -108,7 +133,10 @@ export class BaileysSessionStore {
       process.env.BAILEYS_SESSION_STORE_MAX_ENTRIES,
       SESSION_STORE_MAP_CAP_DEFAULT,
     );
-    this.contacts = new LruMap(maxEntries);
+    // A saved name only ever arrives from the account's own app-state address book, never from peer
+    // traffic, so pinning on it keeps the curated set out of reach of the peers this session happens
+    // to observe. The pinned population is bounded by the account's own contact list.
+    this.contacts = new LruMap(maxEntries, contact => Boolean(contact.name));
     this.chats = new LruMap(maxEntries);
     this.lastMessages = new LruMap(maxEntries);
     this.lidToPn = new LruMap(maxEntries);
