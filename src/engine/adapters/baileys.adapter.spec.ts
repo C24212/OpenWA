@@ -4714,6 +4714,19 @@ describe('BaileysAdapter group events (group-participants.update / groups.update
     expect(firstEvent(onGroupEvent).groupId).toBe('789-000@g.us');
   });
 
+  it('skips a self-created group addressed by lid when the creds carry no own lid', async () => {
+    // Without `user.lid` every lid comparison answered false, so the group this session had just
+    // created was reported as a join of itself. The store's own lid mapping settles it instead.
+    fakeSock.user = { id: '628999:1@s.whatsapp.net', name: 'Me' }; // no lid on the creds
+    const { onGroupEvent } = await readyWithGroupEvents();
+    // The session learns its own lid from ordinary traffic, the same way every other mapping arrives.
+    fakeSock.fire('lid-mapping.update', { lid: '999000@lid', pn: '628999@s.whatsapp.net' });
+
+    fakeSock.fire('groups.upsert', [createdGroup({ author: '999000@lid', owner: '999000@lid', authorPn: undefined })]);
+
+    expect(onGroupEvent).not.toHaveBeenCalled();
+  });
+
   it('reports a groups.upsert entry the session authored for a group another account owns', async () => {
     fakeSock.user = { id: '628999:1@s.whatsapp.net', lid: '999000:1@lid', name: 'Me' };
     const { onGroupEvent } = await readyWithGroupEvents();

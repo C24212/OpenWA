@@ -482,7 +482,14 @@ export class BaileysEvents {
     const isSelf = (jid: string | undefined): boolean => {
       if (!jid) return false;
       const { kind, userPart: user } = parseWaId(jid);
-      return kind === 'user' ? user === phone : kind === 'lid' && user === lidUser;
+      if (kind === 'user') return user === phone;
+      if (kind !== 'lid') return false;
+      if (lidUser !== undefined) return user === lidUser;
+      // Creds carrying no `user.lid` leave nothing to compare a lid-addressed actor against, and
+      // every such comparison would answer false: a group this session created would then be
+      // reported as a join of itself. Fall back to the session's own lid to phone mapping, which the
+      // store learns from the same traffic.
+      return userPart(this.host.toNeutralJid(jid)) === phone;
     };
     for (const group of Array.isArray(groups) ? groups : []) {
       // Live, whatsapp-web.js emits no group.join when the session created the group, so that entry is

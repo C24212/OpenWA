@@ -206,6 +206,15 @@ export class BaileysSessionStore {
    * Copy own enumerable fields whose value is not `undefined`. History-sync contacts always include
    * `name: displayName || name || username || undefined`, and a later `{ ...existing, ...partial }`
    * spread would wipe a saved address-book name that arrived first via `contacts.upsert`.
+   *
+   * KNOWN LIMIT: a saved name therefore cannot be cleared, so a contact deleted or renamed blank on
+   * the phone keeps its old name here, stays in `GET /contacts`, and (being named) is pinned against
+   * eviction. Making an absent name authoritative is NOT a safe fix on its own: the same method
+   * serves `contacts.update`, which Baileys emits as `{ id, notify }` for the pushname on every
+   * inbound message, so absent-means-clear there would wipe the address book message by message.
+   * Only an app-state `contactAction` could carry that meaning, and whether WhatsApp expresses a
+   * deletion as a contactAction with empty fields is unverified here; settling it needs a live
+   * account, not a guess on this path.
    */
   private assignDefined(target: BaileysContact, source: Partial<BaileysContact>): void {
     for (const key of Object.keys(source) as (keyof BaileysContact)[]) {
