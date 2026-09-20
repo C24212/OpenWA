@@ -11,8 +11,9 @@ import { DataSource } from 'typeorm';
  *  - the driver binds a JS Date as the PROCESS's local wall time (`sessions.connectedAt`, the lease
  *    columns, the pending-delivery stamps: every column the app itself writes),
  *  - the driver parses a naive timestamp back as PROCESS-local,
- *  - `DEFAULT now()`, which is what fills every `@CreateDateColumn`/`@UpdateDateColumn` (TypeORM does
- *    not bind those), writes the SERVER session's zone.
+ *  - `DEFAULT now()`, which is what fills a `@CreateDateColumn`/`@UpdateDateColumn` the app leaves
+ *    alone (TypeORM binds one only when a value is passed, as the contact and message-store upserts
+ *    and the Baileys history backfill do), writes the SERVER session's zone.
  *
  * Off UTC the row therefore carries two conventions at once, and comparisons that mix them are wrong by
  * the offset: a retention `LessThan(cutoff)` binds the cutoff as local wall time and measures it against

@@ -51,10 +51,12 @@ export const PAIRING_NOT_READY_409 =
  * attempt instead.
  */
 export const PAIRING_TRANSPORT_503 =
-  'The pairing code could not be generated: every attempt landed while WhatsApp Web was reloading its ' +
-  'own page, so the request never reached WhatsApp. The condition is transient and the request is ' +
-  "worth retrying; the last attempt's reason is carried in the message. The Baileys engine does not " +
-  'answer this, having no page to reload.';
+  'The pairing code could not be generated: the gateway stopped waiting after its attempt budget, ' +
+  'usually because WhatsApp Web kept reloading its QR page. The condition is transient and the ' +
+  "request is worth retrying; the last attempt's reason is carried in the message. An attempt that " +
+  'timed out may still have reached WhatsApp, and a retry starts the linking flow again, so the ' +
+  'unlink warning on this route applies to the retry too. The Baileys engine does not answer this, ' +
+  'having no page to reload.';
 
 /**
  * The catalog and status services pass a `NotFoundException` factory to `EngineRegistry.require()`

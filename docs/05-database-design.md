@@ -180,6 +180,8 @@ Every timestamp column on the PostgreSQL data connection is `timestamp without t
 
 Three `@CreateDateColumn`/`@UpdateDateColumn` columns are filled by the app rather than by that default: `lid_mappings.updatedAt`, `chat_states.updatedAt` and `baileys_stored_messages.createdAt` reach the database through an `upsert` that passes the value, so the default behind them never fires and they follow the binding rule above instead of the session zone.
 
+`messages.createdAt` is a fourth, and the only split one: a live message takes the server default, while a row written by the Baileys history backfill carries the message's own time, stamped in `message-history-projector.ts` so the chat panel orders history correctly. Both conventions are UTC from this release on, and the two cannot be told apart row by row, which is why the upgrade notes exclude that column from any blanket conversion.
+
 Comparisons therefore mean the same thing on both dialects: a retention `LessThan(cutoff)`, a lease deadline written by another node, and a backup restored from any host all line up. SQLite is unaffected; it already stores ISO text in UTC.
 
 ## 5.2 Entity Relationship Diagram
