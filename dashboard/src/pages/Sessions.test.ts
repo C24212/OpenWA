@@ -796,6 +796,48 @@ test('a disconnected push closes the QR modal once the re-read shows no engine',
   }
 });
 
+// The disconnect handler blanks the code, then asks the server whether an engine is still
+// registered, and closes the modal on the answer. A reconnect can finish inside that window and push
+// a fresh, scannable code; closing then would throw it away.
+test('a QR pushed while the disconnect re-read is in flight keeps the modal open', async () => {
+  const { screen, fireEvent, within, waitFor, act } = rtl;
+  resetFetchCalls();
+  window.sessionStorage.setItem('openwa_api_key', 'test-key');
+  const row: Session = { ...SESSION_QR, id: 'sess-raced-1', name: 'raced', status: 'qr_ready', engineLoaded: true };
+  SESSIONS.push(row);
+  try {
+    renderSessions();
+
+    const card = (await screen.findByText('raced')).closest('.session-card') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Show QR' }));
+    await screen.findByAltText('QR');
+
+    // The server answer will say the engine is gone, which is what used to close the modal outright.
+    Object.assign(row, { status: 'disconnected', engineLoaded: false });
+    pushSessionStatus(row.id, 'disconnected');
+
+    // A fresh code lands before that answer is applied.
+    const socket = lastSocket();
+    assert.ok(socket, 'expected the page to have opened a socket');
+    act(() => {
+      socket.receive('message', {
+        type: 'event',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        payload: {
+          event: 'session.qr',
+          sessionId: row.id,
+          data: { qrCode: 'data:image/png;base64,FRESH' },
+        },
+      });
+    });
+
+    await waitFor(() => assert.ok(findFetchCall('GET', '/api/sessions')));
+    assert.ok(screen.queryByRole('dialog'), 'the modal closed over a QR code that had just arrived');
+  } finally {
+    SESSIONS.pop();
+  }
+});
+
 test('a disconnected push keeps the QR modal while the engine is still registered', async () => {
   const { screen, fireEvent, within } = rtl;
   resetFetchCalls();

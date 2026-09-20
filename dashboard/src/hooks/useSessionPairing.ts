@@ -30,7 +30,7 @@ export interface SessionPairing {
   handleShowQR: (id: string) => Promise<void>;
   handleCloseQRModal: () => void;
   applyQrPush: (event: { sessionId: string; qrCode: string }) => void;
-  dismissQrForSession: (sessionId: string) => void;
+  dismissQrForSession: (sessionId: string, onlyIfBlank?: boolean) => void;
   clearQrCodeForSession: (sessionId: string) => void;
 }
 
@@ -188,8 +188,17 @@ export function useSessionPairing({ sessions, sessionsRef, reloadSessions }: Use
   // Clear the modal when the session that owned it stops, so it never hangs on a disconnected
   // session's stale code. Functional form deliberately: reading `qrData` here would make it a
   // dependency everywhere this is held (the page's stop/force-kill/unlink handlers).
-  const dismissQrForSession = useCallback((sessionId: string) => {
-    setQrData(current => (current?.sessionId === sessionId ? null : current));
+  //
+  // `onlyIfBlank` is for the one caller that decides asynchronously: the disconnect handler blanks
+  // the code, asks the server whether an engine is still registered, and closes the modal on the
+  // answer. A reconnect can complete inside that window and push a fresh code, and closing then
+  // would throw away a code that works. A still-blank modal means nothing has arrived since.
+  const dismissQrForSession = useCallback((sessionId: string, onlyIfBlank = false) => {
+    setQrData(current => {
+      if (current?.sessionId !== sessionId) return current;
+      if (onlyIfBlank && current.qrCode) return current;
+      return null;
+    });
   }, []);
 
   // Blank the displayed code while keeping the modal open, for a disconnect whose engine is still

@@ -258,7 +258,10 @@ export function Sessions() {
           clearQrCodeForSession(event.sessionId);
           void fetchSessions().then(rows => {
             if (rows.find(s => s.id === event.sessionId)?.engineLoaded === false) {
-              dismissQrForSession(event.sessionId);
+              // Only if nothing arrived while the answer was in flight: a reconnect that completed
+              // in that window has already pushed a fresh code into the modal blanked above, and
+              // that code is scannable.
+              dismissQrForSession(event.sessionId, true);
             }
           });
           toast.warning(t('sessions.toasts.disconnectedTitle'), t('sessions.toasts.disconnectedDesc'));
