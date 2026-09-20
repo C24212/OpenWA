@@ -2,10 +2,10 @@ import { reportMissingCallHook } from './wwebjs-call-hook-check';
 
 /**
  * whatsapp-web.js detects an incoming call by patching ONE page function: the call collection's
- * internal `Map.set`. It installs that patch only when the page exposes a call collection shaped the
- * way it expects, so a WhatsApp Web build that moves or renames that collection leaves messages
- * working and calls undetectable, with nothing in the log to say so. This check turns that silence
- * into a warning.
+ * internal `Map.set`. It installs that patch only when the page's module for the collection exposes
+ * an `.on` function, so a build that keeps the module but drops that method leaves messages working
+ * and calls undetectable, with nothing in the log to say so. This check turns that silence into a
+ * warning, and stays quiet for the neighbouring shapes it cannot tell apart from a healthy page.
  */
 describe('reportMissingCallHook', () => {
   const makeLogger = (): { warn: jest.Mock; debug: jest.Mock } => ({ warn: jest.fn(), debug: jest.fn() });

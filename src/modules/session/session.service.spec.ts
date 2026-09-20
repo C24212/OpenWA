@@ -5262,8 +5262,9 @@ describe('SessionService', () => {
       // Regression guard for the WhatsApp Status feature: posting a status produces an own-send echo
       // that Baileys delivers as `messages.upsert` with `type: 'append'` (NOT 'notify'). The adapter's
       // handleMessagesUpsert recognises the echo by the id the status post recorded and skips it before
-      // processInboundMessage, so it never reaches the engine callbacks. This test pins the engine-neutral last-chance guard —
-      // `isStatusBroadcast` on both onMessageCreate and onMessage — so a future change can't silently
+      // processInboundMessage, so it never reaches the engine callbacks. This test pins the
+      // engine-neutral last-chance guard, `isStatusBroadcast` on both onMessageCreate and
+      // onMessage, so a future change can't silently
       // leak a status echo to websockets, webhooks, or the message table. Asserts the full no-side-effect
       // contract (webhook dispatch + WS emit + DB insert) for completeness, even though the existing
       // isStatusBroadcast tests above already cover the dispatch-only slice.

@@ -43,11 +43,12 @@ export interface SaveOutgoingMessageData {
   status?: MessageStatus;
   metadata?: Record<string, unknown>;
   /**
-   * Quoted id for a send that is a reply. Folded into `metadata.quotedMessage` here rather than
-   * by each sender so the nine send paths and `reply()` persist one shape — a row that quoted a
-   * message but records nothing is simply wrong history, and the dashboard reads this key to
-   * render the reply preview. The body is left empty: unlike `reply()`, the send paths do not
-   * look the quoted message up, and '' is already reply()'s own value when that lookup fails.
+   * Quoted id for a send that quotes something. Folded into `metadata.quotedMessage` at the shared
+   * persist rather than by each sender, so the nine send paths and `reply()` record one shape: a row
+   * that quoted a message but records nothing is simply wrong history, and the dashboard reads this
+   * key to render the quote preview. The quoted body is looked up there too, so a sender does not
+   * have to remember; a quoted row with no text of its own (a caption-less image, say) still yields
+   * '', which the preview renders as an empty box.
    */
   quotedMessageId?: string;
 }

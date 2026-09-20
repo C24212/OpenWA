@@ -20,7 +20,7 @@ export class CreateSessionDto {
   @ApiPropertyOptional({
     description:
       'Session configuration. Only three keys are read: autoRejectCalls (boolean, default false, ' +
-      'Baileys engine only) rejects incoming calls as soon as they ring — the call.received event is still emitted ' +
+      'Baileys engine only) rejects incoming calls as soon as they ring, and the call.received event is still emitted ' +
       'first; maxReconnectAttempts (0-20, default unlimited) caps consecutive reconnects and ' +
       'reconnectBaseDelay (1000-300000 ms, default 5000) sets the backoff base, both for the ' +
       "gateway's own reconnect only (on Baileys the engine retries a transient drop itself, with a " +

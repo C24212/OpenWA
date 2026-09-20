@@ -314,8 +314,11 @@ export const CURATED_CAPABILITY_EXCEPTIONS: Record<string, MethodCapability> = {
       'checking no precondition; measured twice (2026-09-17, 2026-09-18) a request for a number that ' +
       'already had a linked session was followed within about a minute by WhatsApp revoking that ' +
       'device, whatsapp-web.js deleting its credentials and the session returning to qr_ready. It ' +
-      'also arms an in-page 3-minute re-request interval that OpenWA cannot cancel (cancelPairingCode ' +
-      'is not exposed) and notifies the phone on every code. baileys requestPairingCode ' +
+      'also arms an in-page 3-minute re-request interval that mints a fresh code and notifies the ' +
+      'phone on every tick. The interval lives in the page, so it dies with the next WhatsApp Web ' +
+      'reload (roughly every 20s while UNPAIRED) and with the session; the library does expose ' +
+      'cancelPairingCode, but it returns the page to QR mode, which is not what a retry wants. ' +
+      'baileys requestPairingCode ' +
       '(Socket/socket.js:596-650) writes only its own creds and sends one link_code_companion_reg IQ, ' +
       'with no shared page; no side effect was observed there.',
   },

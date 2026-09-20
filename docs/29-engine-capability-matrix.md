@@ -25,7 +25,7 @@ Statuses used in the tables:
 
 Two complementary views:
 
-- **29.4 — the OpenWA contract view.** Rows are the 113 `IWhatsAppEngine` methods; use it to see
+- **29.4, the OpenWA contract view.** Rows are the 113 `IWhatsAppEngine` methods; use it to see
   what a REST caller gets per engine. Source of truth: `src/engine/engine-capability-matrix.ts`
   (per-cell `evidence` strings cite the exact library `file:symbol` inspected).
 - **29.5 — the full engine inventory.** Rows are **every method the installed libraries expose**,
@@ -179,10 +179,11 @@ Rows that are ✅ on **both** engines where one side is patch-dependent: `initia
 `sendTextMessage` (🔧³ wwjs), `postTextStatus` / `postImageStatus` / `postVideoStatus` /
 `postVoiceStatus` (🔧² wwjs), `removeParticipants` / `promoteParticipants` / `demoteParticipants`
 (🔧⁷ wwjs), `setGroupDescription` (🔧⁹ wwjs), `blockContact` / `unblockContact` (🔧⁸ wwjs), and
-every media-carrying send (🔧¹⁰ wwjs). The last two are not marked in the rows themselves, because
-each covers a whole class of rows rather than one; every other entry here is. Everything else that
-is ✅-both carries no patch dependency of its own, but still rests on the column-wide 🔧¹ (wwjs) and
-🔧⁵ (baileys), so no row runs on stock library code on both sides.
+every media-carrying send (🔧¹⁰ wwjs). The last two carry no mark in the rows themselves and are
+recorded in the table above instead: 🔧¹⁰ because it covers a whole class of rows rather than one,
+🔧⁸ simply because its two rows were never marked. Everything else that is ✅-both carries no patch
+dependency of its own, but still rests on the column-wide 🔧¹ (wwjs) and 🔧⁵ (baileys), so no row
+runs on stock library code on both sides.
 
 ### 29.3.3 Why no patch surfaces `transferChannelOwnership`'s swallowed reason
 
@@ -208,7 +209,7 @@ opens `if (!channel) return false;` before its try, so its `false` conflates _ch
 _WhatsApp refused_, and the adapter answers 403 for both. That distinction is ours to make in our own
 adapter and involves no library change.
 
-## 29.4 Full capability matrix — the OpenWA contract view (113 methods)
+## 29.4 Full capability matrix: the OpenWA contract view (113 methods)
 
 Legend recap: **✅** supported · **✅🔧ⁿ** supported via OpenWA patch `🔧ⁿ` (29.3) ·
 **❌ gap** adapter-gap · **❌ lib** library-limitation. Column headers carry the engine-wide
@@ -888,7 +889,7 @@ adapter boundary — none silently stubs.
 
 ✅ means works end-to-end — but these rows carry behavioral differences worth knowing:
 
-- **`clickButton` (Baileys) — native-flow is unverified.** Classic `buttonsMessage` /
+- **`clickButton` (Baileys), native-flow is unverified.** Classic `buttonsMessage` /
   `templateMessage` / `listMessage` prompts go through Baileys' `buttonReply` / `listReply`
   helpers. A native-flow `interactiveMessage` prompt is answered with the same template
   `buttonReply` shape; Baileys also has `InteractiveResponseMessage.nativeFlowResponseMessage`,
@@ -907,7 +908,7 @@ adapter boundary — none silently stubs.
   `NotImplementedException` → HTTP 501) at `ensureNotChannelRecipient`
   (`wwebjs-messaging.ts:425` for the media funnel, `:492` for stickers). whatsapp-web.js calls
   `msg.avParams()`, removed in a recent WA Web build (upstream wwebjs#201823, unresolved).
-  Text→channel is unaffected, and Baileys has no such restriction — so these five rows answer `501`
+  Text→channel is unaffected, and Baileys has no such restriction, so these five rows answer `501`
   without a per-row ❌ in 29.4.
 - **`sendStickerMessage` — what each engine converts.** Both engines guarantee the payload really is
   WebP, but they reach it differently and they do not accept the same inputs. whatsapp-web.js passes
