@@ -17,12 +17,48 @@ export type AckResult = { status: number; body?: string; headers?: Record<string
  */
 export function renderAck(spec: IngressResponseContract['ack'] | undefined, ctx: AckRenderCtx): AckResult {
   if (!spec) return { status: 202, body: 'accepted' };
-  const result: AckResult = { status: spec.status ?? 202 };
-  if (spec.body !== undefined) {
+  const result: AckResult = { status: typeof spec.status === 'number' ? spec.status : 202 };
+  // Typed as a string, but a manifest is third-party JSON and the loader does not check the type of
+  // every leaf, so a number or an object here would throw out of a function documented as total and
+  // turn an accepted delivery into a 500.
+  if (typeof spec.body === 'string') {
     result.body = substitute(spec.body, ctx);
   }
-  if (spec.headers) result.headers = { ...spec.headers };
+  if (spec.headers && typeof spec.headers === 'object') {
+    result.headers = Object.fromEntries(Object.entries(spec.headers).filter(([, v]) => typeof v === 'string'));
+  }
   return result;
+}
+
+/**
+ * Header names a route's declared ack may never write.
+ *
+ * The ack block is plugin-authored and lands on the gateway's own origin, so it must not undo what
+ * the app sets for every response: `content-type` is decided by {@link ackContentType} immediately
+ * after, and the rest are the browser-facing protections that make a reflected ack body safe in the
+ * first place. Anything else a manifest declares still goes out verbatim.
+ */
+const RESERVED_ACK_HEADERS: ReadonlySet<string> = new Set([
+  'content-type',
+  'content-length',
+  'content-security-policy',
+  'x-content-type-options',
+  'x-frame-options',
+  'strict-transport-security',
+  'referrer-policy',
+  'set-cookie',
+  'access-control-allow-origin',
+  'access-control-allow-credentials',
+]);
+
+/** The subset of a declared ack's headers that may reach the wire. Total. */
+export function safeAckHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  if (!headers) return {};
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([name, value]) => typeof value === 'string' && !RESERVED_ACK_HEADERS.has(name.toLowerCase()),
+    ),
+  );
 }
 
 /**
@@ -40,7 +76,7 @@ export function ackContentType(headers: Record<string, string> | undefined): str
   const declared = headers
     ? Object.entries(headers).find(([name]) => name.toLowerCase() === 'content-type')?.[1]
     : undefined;
-  if (!declared) return 'text/plain';
+  if (typeof declared !== 'string' || !declared) return 'text/plain';
   const mediaType = declared.split(';', 1)[0].trim().toLowerCase();
   return HONORED_ACK_MEDIA_TYPES.has(mediaType) ? declared : 'text/plain';
 }

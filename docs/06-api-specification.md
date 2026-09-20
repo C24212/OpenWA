@@ -6693,19 +6693,19 @@ response only; the `verifyToken` is also shown (unchanged).
 
 #### GET /api/ingress/:pluginId/:instanceId/:path
 
-**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded
+**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded · `503` a route declaring a `session-alive` preflight whose bound session is not connected
 
 #### POST /api/ingress/:pluginId/:instanceId/:path
 
-**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded
+**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded · `503` a route declaring a `session-alive` preflight whose bound session is not connected
 
 #### PUT /api/ingress/:pluginId/:instanceId/:path
 
-**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded
+**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded · `503` a route declaring a `session-alive` preflight whose bound session is not connected
 
 #### PATCH /api/ingress/:pluginId/:instanceId/:path
 
-**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded
+**Errors:** `401` signature verification failed (missing, stale, or wrong per-instance secret) · `413` payload too large · `429` rate limit exceeded · `503` a route declaring a `session-alive` preflight whose bound session is not connected
 
 #### DELETE /api/ingress/:pluginId/:instanceId/:path
 
@@ -6724,7 +6724,7 @@ plugin processing. `200` means the `GET` verification-challenge echo, or a route
 declarative `ack` config (doc 25); the plugin itself always runs async. A re-delivery of an
 already-persisted event is answered with that same ack, byte for byte, and is not enqueued again.
 
-**Errors:** `401` signature verification failed (missing, stale, or wrong secret) · `403` `GET` verification challenge failed (`verifyToken` mismatch) · `404` unknown pluginId/instanceId, or no such claimed route · `413` body over the route's `maxBodyBytes` · `429` rate limit: the per-instance bucket (`INGRESS_INSTANCE_LIMIT`) or the per-client-IP bucket (`INGRESS_IP_LIMIT`), both per `INGRESS_INSTANCE_TTL`; the global per-IP tiers skip this route, so these two are its bounds, and `Retry-After-instance` / `Retry-After-ingress-ip` names the one that shed the request
+**Errors:** `401` signature verification failed (missing, stale, or wrong secret) · `403` `GET` verification challenge failed (`verifyToken` mismatch) · `404` unknown pluginId/instanceId, or no such claimed route · `413` body over the route's `maxBodyBytes` · `429` rate limit: the per-instance bucket (`INGRESS_INSTANCE_LIMIT`) or the per-client-IP bucket (`INGRESS_IP_LIMIT`), both per `INGRESS_INSTANCE_TTL`; the global per-IP tiers skip this route, so these two are its bounds, and `Retry-After-instance` / `Retry-After-ingress-ip` names the one that shed the request, alongside a plain `Retry-After` carrying the same delay · `503` a route declaring a `session-alive` preflight whose bound session is not connected: the delivery is not persisted, so the provider's retry is treated as a new delivery, and `Retry-After` carries the delay
 
 ## 6.5 Real-time API (WebSocket)
 

@@ -1,4 +1,4 @@
-import { ackContentType, renderAck } from './ingress-ack';
+import { ackContentType, renderAck, safeAckHeaders } from './ingress-ack';
 
 const ctx = { rawBody: '{"a":1}', timestamp: '1700000000', id: 'd1' };
 
@@ -55,5 +55,38 @@ describe('ackContentType', () => {
     // A prefix that merely starts with an allowlisted type must not slip through.
     expect(ackContentType({ 'content-type': 'application/json-but-html' })).toBe('text/plain');
     expect(ackContentType({ 'content-type': '' })).toBe('text/plain');
+  });
+});
+
+describe('safeAckHeaders (a plugin-authored ack cannot undo the app response contract)', () => {
+  it('drops the headers that decide how a browser treats the reflected body', () => {
+    expect(
+      safeAckHeaders({
+        'X-Content-Type-Options': 'nosniff-not',
+        'Content-Security-Policy': 'default-src *',
+        'Set-Cookie': 'a=b',
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'text/html',
+        'X-Provider-Ack': 'ok',
+      }),
+    ).toEqual({ 'X-Provider-Ack': 'ok' });
+  });
+
+  it('is total: no headers, and a non-string value, both answer an object', () => {
+    expect(safeAckHeaders(undefined)).toEqual({});
+    expect(safeAckHeaders({ 'X-N': 7 as unknown as string })).toEqual({});
+  });
+});
+
+describe('renderAck / ackContentType stay total on a manifest the loader did not type-check', () => {
+  const ctx = { rawBody: '{}', timestamp: '1', id: 'd1' };
+
+  it('ignores a non-string body and a non-number status instead of throwing', () => {
+    const spec = { status: '202' as unknown as number, body: 7 as unknown as string };
+    expect(renderAck(spec, ctx)).toEqual({ status: 202 });
+  });
+
+  it('ignores a non-string declared content type', () => {
+    expect(ackContentType({ 'content-type': 7 as unknown as string })).toBe('text/plain');
   });
 });
