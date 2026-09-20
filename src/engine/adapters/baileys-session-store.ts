@@ -118,7 +118,10 @@ class LruMap<K, V> {
  *
  * Every map is LRU-bounded (`BAILEYS_SESSION_STORE_MAX_ENTRIES`, default 5000 per map, 0 = unbounded)
  * because contacts/chats/lastMessages/lidToPn all grow from peer-controlled traffic — without a cap a
- * chatty account leaks one entry per distinct peer ever seen. Miss paths after an eviction:
+ * chatty account leaks one entry per distinct peer ever seen. On the contacts map that cap governs the
+ * peers ALONE: a contact carrying a saved name is pinned and never evicted, because it comes from the
+ * account's own address book rather than from traffic, and that side is bounded by the address book
+ * instead (see LruMap's `pinned`). Miss paths after an eviction:
  * `lidToPn` falls back to the contacts map and then the persisted cross-session lid->phone table (all
  * writes are written through), `lastMessage` reads null (callers treat it as "nothing known"),
  * `getEphemeralExpiration` falls back to `Chat.ephemeralExpiration` then undefined (never forces a

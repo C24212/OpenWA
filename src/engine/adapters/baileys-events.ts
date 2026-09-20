@@ -195,8 +195,9 @@ export class BaileysEvents {
       // Throttle through the limiter so a burst of media messages can't run unbounded parallel
       // downloads (each a full decrypted buffer in heap). Ordering stays correct — the message store
       // keeps the newest by timestamp. The queue is unbounded, so a burst parks rather than shedding
-      // and the message keeps its media either way; on any rejection we still re-process WITHOUT
-      // media, so the body and metadata are emitted rather than lost.
+      // and the message keeps its media either way. The catch below is the teardown path: the
+      // limiter rejects only when it has been closed, since processInboundMessage handles its own
+      // failures (a media download that fails emits the omitted marker rather than throwing).
       void this.host.inboundLimiter
         .run(() => this.processInboundMessage(msg))
         .catch((error: unknown) => {
