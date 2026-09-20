@@ -87,11 +87,13 @@ export class IngressController {
     const headers: Record<string, string> = Object.fromEntries(
       Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v.join(',') : String(v ?? '')]),
     );
-    // Express answers a repeated query parameter with an array, and a nested one with an object, so
-    // the Record<string, string> the service is typed against is a promise the framework does not
-    // keep. The challenge path feeds these straight into a constant-time compare, which throws on
-    // anything that is not a string, so `?token=a&token=b` answered 500 rather than failing the
-    // challenge. Flattened here, the way the headers above already are.
+    // Express answers a repeated query parameter with an array, so the Record<string, string> the
+    // service is typed against is a promise the framework does not keep. The challenge path feeds
+    // these straight into a constant-time compare, which throws on anything that is not a string, so
+    // `?token=a&token=b` answered 500. Flattened here, the way the headers above already are: the
+    // first value wins, as URLSearchParams.get and most providers' own clients read it. The app runs
+    // Express's default 'simple' query parser, which never nests (`?a[b]=c` is the key `a[b]`), so
+    // the last arm is only there to keep the mapping total if that setting ever changes.
     const flatQuery: Record<string, string> = Object.fromEntries(
       Object.entries(query as Record<string, unknown>).map(([k, v]) => [
         k,
@@ -111,8 +113,9 @@ export class IngressController {
     if (result.headers) res.set(safeAckHeaders(result.headers));
     // Both reflections echo provider-controlled strings (hub.challenge, the ack template). Express
     // types a bare send() as text/html, which turns a reflection into XSS material on this origin, so
-    // only a non-executable declared type survives and everything else is forced to text/plain. This
-    // runs AFTER res.set on purpose: both write the same Content-Type slot and the last writer wins.
+    // only a non-executable declared type survives and everything else is forced to text/plain. It
+    // reads the UNFILTERED headers on purpose: safeAckHeaders fences content-type precisely because
+    // this is the one place allowed to decide it.
     res.type(ackContentType(result.headers));
     res.status(result.status).send(result.body ?? '');
   }

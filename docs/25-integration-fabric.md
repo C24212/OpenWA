@@ -269,7 +269,13 @@ Within major 1 the surface grows additively. A route's optional `response` contr
 `headers`, rendered host-side with `{rawBody}`/`{timestamp}`/`{id}` templates from the verified request),
 and an advisory `deadlineMs` — lets an adapter shape the synchronous HTTP response the provider sees; the
 plugin still always runs async, and a route with no `response` is byte-identical to today's default
-fast-ack. The `mode: 'sync-reply'` value is **deprecated** in favor of `response`: it was inert dead code
+fast-ack. `ack.body` and every `ack.headers` value must be strings, and a manifest that declares
+otherwise is refused at install and at boot. A declared header is dropped rather than written when it
+names the content type (decided by the allowlist in §25.8), a framing or encoding header (`content-length`,
+`transfer-encoding`, `content-encoding`, since the response is framed by the host and never compressed), a
+cookie, a CORS header, or one of the browser-facing protections the host sets for every response.
+
+The `mode: 'sync-reply'` value is **deprecated** in favor of `response`: it was inert dead code
 that was never wired to the HTTP response (the pipeline is always async + fast-ack), and it is kept in the
 `mode` union only to preserve SDK v1 additive-only compatibility — do not remove it within major 1, and do
 not rely on it at runtime.

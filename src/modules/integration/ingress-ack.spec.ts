@@ -59,17 +59,32 @@ describe('ackContentType', () => {
 });
 
 describe('safeAckHeaders (a plugin-authored ack cannot undo the app response contract)', () => {
-  it('drops the headers that decide how a browser treats the reflected body', () => {
-    expect(
-      safeAckHeaders({
-        'X-Content-Type-Options': 'nosniff-not',
-        'Content-Security-Policy': 'default-src *',
-        'Set-Cookie': 'a=b',
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'text/html',
-        'X-Provider-Ack': 'ok',
-      }),
-    ).toEqual({ 'X-Provider-Ack': 'ok' });
+  it('drops every reserved name, whatever the case, and keeps everything else', () => {
+    const reserved = {
+      'Content-Type': 'text/html',
+      'Content-Length': '99',
+      'Transfer-Encoding': 'chunked',
+      'Content-Encoding': 'gzip',
+      'Content-Security-Policy': 'default-src *',
+      'X-Content-Type-Options': 'nosniff-not',
+      'X-Frame-Options': 'ALLOWALL',
+      'Strict-Transport-Security': 'max-age=0',
+      'Referrer-Policy': 'unsafe-url',
+      'Set-Cookie': 'a=b',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Credentials': 'true',
+    };
+    // Every name is asserted, so removing any one of them from the set fails this.
+    expect(safeAckHeaders(reserved)).toEqual({});
+    expect(safeAckHeaders({ ...reserved, 'X-Provider-Ack': 'ok' })).toEqual({ 'X-Provider-Ack': 'ok' });
+  });
+
+  it('drops the framing headers, which would put an undecodable response on the wire', () => {
+    // Express frames the ack itself and the host runs no compression middleware, so a declared
+    // `Transfer-Encoding: chunked` or `Content-Encoding: gzip` describes an encoding the body does
+    // not have: the provider's HTTP client fails to decode it and retries a delivery already queued.
+    expect(safeAckHeaders({ 'transfer-encoding': 'chunked' })).toEqual({});
+    expect(safeAckHeaders({ 'content-encoding': 'gzip' })).toEqual({});
   });
 
   it('is total: no headers, and a non-string value, both answer an object', () => {
@@ -82,7 +97,7 @@ describe('renderAck / ackContentType stay total on a manifest the loader did not
   const ctx = { rawBody: '{}', timestamp: '1', id: 'd1' };
 
   it('ignores a non-string body and a non-number status instead of throwing', () => {
-    const spec = { status: '202' as unknown as number, body: 7 as unknown as string };
+    const spec = { status: '204' as unknown as number, body: 7 as unknown as string };
     expect(renderAck(spec, ctx)).toEqual({ status: 202 });
   });
 

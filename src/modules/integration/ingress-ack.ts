@@ -18,9 +18,10 @@ export type AckResult = { status: number; body?: string; headers?: Record<string
 export function renderAck(spec: IngressResponseContract['ack'] | undefined, ctx: AckRenderCtx): AckResult {
   if (!spec) return { status: 202, body: 'accepted' };
   const result: AckResult = { status: typeof spec.status === 'number' ? spec.status : 202 };
-  // Typed as a string, but a manifest is third-party JSON and the loader does not check the type of
-  // every leaf, so a number or an object here would throw out of a function documented as total and
-  // turn an accepted delivery into a 500.
+  // validateIngressManifest rejects a non-string body, a non-string header value and a non-integer
+  // status, so these guards are the second line rather than the first: this function is documented
+  // as total, and it is also reachable from a built-in manifest and from a test fixture that never
+  // went through the loader. On a shape the loader would have refused, fall back rather than throw.
   if (typeof spec.body === 'string') {
     result.body = substitute(spec.body, ctx);
   }
@@ -31,16 +32,24 @@ export function renderAck(spec: IngressResponseContract['ack'] | undefined, ctx:
 }
 
 /**
- * Header names a route's declared ack may never write.
+ * Header names a route's declared ack may never write. Three groups, all plugin-authored and landing
+ * on the gateway's own origin, so none of them may undo what the app sets for every response:
  *
- * The ack block is plugin-authored and lands on the gateway's own origin, so it must not undo what
- * the app sets for every response: `content-type` is decided by {@link ackContentType} immediately
- * after, and the rest are the browser-facing protections that make a reflected ack body safe in the
- * first place. Anything else a manifest declares still goes out verbatim.
+ *  - `content-type`, decided by {@link ackContentType} immediately after;
+ *  - the framing and encoding headers, which describe a body Express has already framed and the host
+ *    never compresses. A declared `Transfer-Encoding: chunked` or `Content-Encoding: gzip` describes
+ *    bytes the ack does not carry, so the provider's HTTP client fails to decode the response and
+ *    retries a delivery the host has already accepted and queued. `content-length` is inert (Express
+ *    overwrites it) and is fenced with them rather than reasoned about separately;
+ *  - the browser-facing protections that make a reflected ack body safe in the first place.
+ *
+ * Anything else a manifest declares still goes out verbatim.
  */
 const RESERVED_ACK_HEADERS: ReadonlySet<string> = new Set([
   'content-type',
   'content-length',
+  'transfer-encoding',
+  'content-encoding',
   'content-security-policy',
   'x-content-type-options',
   'x-frame-options',
