@@ -788,9 +788,10 @@ export class WwebjsLifecycle {
     // gets the companion unlinked (~5m later → disconnected: LOGOUT, #982). Dismiss it best-effort
     // and fall back to ACTION_REQUIRED. Started after READY so a non-ready session never arms it.
     this.host.startOnboardingWatcher();
-    // whatsapp-web.js installs its incoming-call hook as the LAST statement of the same page
-    // evaluate that registers the message listeners, and that evaluate has no try/catch: a module
-    // that stops resolving earlier in it leaves the message bridge live and the call hook absent.
+    // whatsapp-web.js installs its incoming-call hook part-way through the same page evaluate that
+    // registers the message listeners, and that evaluate has no try/catch: a module that stops
+    // resolving before it leaves the message bridge live and the call hook absent (and takes the
+    // chat listeners registered after it as well).
     // The session then looks healthy, keeps delivering messages, and reports no call at all. Warn
     // once per ready rather than leaving that silent; nothing else changes, since only detection is
     // lost. Fire-and-forget: a diagnostic must never delay or fail the promotion to READY.
