@@ -540,6 +540,21 @@ describe('dedupOn: body (a provider that rotates its delivery id on retry)', () 
     await new IngressService(d).handle({ ...req, headers: { 'x-delivery': 'd-1' } });
     expect((d.enqueue.mock.calls[0] as [unknown, string])[1]).toBe('d-1');
   });
+
+  // A header that is present but blank is no id at all. Taking it as one gave every delivery the
+  // same empty key, so the dedup row admitted the first and dropped the rest while still answering
+  // each provider with the route's success ack.
+  it('falls back to the body hash when the dedup header is present but blank', async () => {
+    const first = deps();
+    await new IngressService(first).handle({ ...req, headers: { 'x-delivery': '' }, rawBody: '{"n":1}' });
+    const firstId = (first.enqueue.mock.calls[0] as [unknown, string])[1];
+    expect(firstId).not.toBe('');
+
+    const second = deps();
+    await new IngressService(second).handle({ ...req, headers: { 'x-delivery': '' }, rawBody: '{"n":2}' });
+    expect(second.enqueue).toHaveBeenCalledTimes(1);
+    expect((second.enqueue.mock.calls[0] as [unknown, string])[1]).not.toBe(firstId);
+  });
 });
 
 describe('extractConversationId', () => {
