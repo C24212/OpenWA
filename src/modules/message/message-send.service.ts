@@ -483,15 +483,7 @@ export class MessageSendService {
     const engine = this.getEngine(sessionId);
 
     // Resolve the quoted message body (best-effort) so the dashboard can render the reply preview.
-    let quotedBody = '';
-    try {
-      const quoted = await this.messageRepository.findOne({
-        where: { sessionId, waMessageId: finalDto.quotedMessageId },
-      });
-      quotedBody = quoted?.body || '';
-    } catch (err) {
-      this.logger.warn(`Failed to resolve quoted message ${finalDto.quotedMessageId}`, { error: String(err) });
-    }
+    const quotedBody = await this.resolveQuotedBody(sessionId, finalDto.quotedMessageId);
 
     // Save message as pending BEFORE sending
     const message = await this.saveOutgoingMessage(sessionId, {
@@ -526,15 +518,7 @@ export class MessageSendService {
     // A click IS a reply to the prompt, so resolve the prompt's body the way reply() does: the
     // dashboard renders the quote box from this field, and a hardcoded empty string left every
     // answered prompt showing an empty quote above the choice the user tapped.
-    let promptBody = '';
-    try {
-      const prompt = await this.messageRepository.findOne({
-        where: { sessionId, waMessageId: finalDto.messageId },
-      });
-      promptBody = prompt?.body || '';
-    } catch (err) {
-      this.logger.warn(`Failed to resolve prompt message ${finalDto.messageId}`, { error: String(err) });
-    }
+    const promptBody = await this.resolveQuotedBody(sessionId, finalDto.messageId);
 
     const message = await this.saveOutgoingMessage(sessionId, {
       chatId: finalDto.chatId,
@@ -590,6 +574,23 @@ export class MessageSendService {
   }
 
   /**
+   * The body of the message a send is quoting, for the dashboard's quote preview. Best-effort in
+   * every direction: an id that names nothing stored (evicted, or sent from the phone before this
+   * gateway saw the chat) and a read that fails both answer '', because a preview is never worth
+   * failing a send over. The row is looked up by engine id within the session, so one session
+   * cannot read another's message.
+   */
+  private async resolveQuotedBody(sessionId: string, quotedMessageId: string): Promise<string> {
+    try {
+      const quoted = await this.messageRepository.findOne({ where: { sessionId, waMessageId: quotedMessageId } });
+      return quoted?.body || '';
+    } catch (err) {
+      this.logger.warn(`Failed to resolve quoted message ${quotedMessageId}`, { error: String(err) });
+      return '';
+    }
+  }
+
+  /**
    * Save outgoing message to database.
    * When called before sending, creates a record with PENDING status; bulk send reuses this after a
    * successful send (status SENT) so batch messages are persisted like single sends.
@@ -602,6 +603,13 @@ export class MessageSendService {
    */
   async saveOutgoingMessage(sessionId: string, data: SaveOutgoingMessageData): Promise<Message> {
     const session = await this.sessionService.findOne(sessionId);
+    // Resolved here rather than in each sender: reply and click-button build their own
+    // `metadata.quotedMessage` and never reach this branch, so every OTHER quoting sender (media,
+    // location, contact, poll, quoted text) used to persist an id with an empty body and the
+    // dashboard drew a blank quote box above the message.
+    const quotedMessage = data.quotedMessageId
+      ? { id: data.quotedMessageId, body: await this.resolveQuotedBody(sessionId, data.quotedMessageId) }
+      : undefined;
     const message = this.messageRepository.create({
       sessionId,
       // An engine that sent a message but could not read its id back reports an empty id (see the
@@ -619,9 +627,7 @@ export class MessageSendService {
       direction: MessageDirection.OUTGOING,
       timestamp: data.timestamp,
       status: data.status ?? MessageStatus.PENDING,
-      metadata: data.quotedMessageId
-        ? { ...data.metadata, quotedMessage: { id: data.quotedMessageId, body: '' } }
-        : data.metadata,
+      metadata: quotedMessage ? { ...data.metadata, quotedMessage } : data.metadata,
     });
     const saved = await this.messageRepository.save(message).catch(async (err: unknown) => {
       const waMessageId = message.waMessageId;

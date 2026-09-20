@@ -938,6 +938,47 @@ describe('MessageSendService', () => {
 
       expect(mockEngine.sendTextMessage).toHaveBeenCalledWith('test@c.us', 'hi');
     });
+
+    it('stores the quoted message body, not an empty quote box', async () => {
+      // Every sender but reply and click-button routes the quoted id through the shared persist,
+      // which hardcoded an empty body, so the dashboard drew a blank quote above a quoted image,
+      // location, contact or poll.
+      (repository.findOne as jest.Mock).mockResolvedValueOnce({ id: 'row-9', body: 'the original text' });
+
+      await service.sendImage('sess-1', {
+        chatId: 'test@c.us',
+        url: 'https://example.com/a.png',
+        quotedMessageId: 'wa-quoted-9',
+      });
+
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { sessionId: 'sess-1', waMessageId: 'wa-quoted-9' },
+      });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            quotedMessage: { id: 'wa-quoted-9', body: 'the original text' },
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('still stores the quote when the quoted row cannot be read', async () => {
+      (repository.findOne as jest.Mock).mockRejectedValueOnce(new Error('database is locked'));
+
+      await service.sendLocation('sess-1', {
+        chatId: 'test@c.us',
+        latitude: 1,
+        longitude: 2,
+        quotedMessageId: 'wa-quoted-9',
+      });
+
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ quotedMessage: { id: 'wa-quoted-9', body: '' } }) as unknown,
+        }),
+      );
+    });
   });
 
   // ── reply / forward ───────────────────────────────────────────────
@@ -1044,6 +1085,11 @@ describe('MessageSendService', () => {
         buttonId: 'yes',
       });
 
+      // The lookup is scoped to the session: without it, one session's prompt body could be quoted
+      // into another session's outgoing row.
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { sessionId: 'sess-1', waMessageId: 'PROMPT-1' },
+      });
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({
