@@ -119,6 +119,8 @@ export interface BaileysEventsHost {
    * is arriving; false for anything the session did not send (see OwnSendRegistry).
    */
   consumeOwnSend(id: string | null | undefined): boolean;
+  /** Claim an id for {@link consumeOwnSend}, so the next delivery carrying it is taken as a repeat. */
+  rememberOwnSend(id: string | null | undefined): void;
   /** A message this session already delivered or sent, from the persistent store; undefined without a store. */
   getStoredMessage(messageId: string): Promise<WAMessage | null> | undefined;
   /** The currently-registered onMessage callback, if any (assigned at initialize()). */
@@ -176,12 +178,23 @@ export class BaileysEvents {
       // a stored message again. That oracle does NOT gate dispatch on the own-send path, which is
       // why the echo has to be caught here, and why a fromMe message the store already holds is
       // dropped in processInboundMessage before it can be reported a second time.
-      if (msg.key.fromMe === true && this.host.consumeOwnSend(msg.key.id)) {
-        this.host.logger.debug('Skipping the echo of a message this session sent', {
-          msgId: msg.key.id ?? 'unknown',
-          type: event.type,
-        });
-        continue;
+      //
+      // One gate catches both repeats. `consume` is true for the echo of a send this session made
+      // through the API, whose id the send path recorded, and for a second delivery of a fromMe
+      // message this handler has already taken, because it claims the id below. Claiming is what
+      // makes the second case work: the store check in processInboundMessage sits behind an await
+      // and can only see ids the store has committed, so two deliveries landing inside that window
+      // would both be reported. This runs before any await, so they cannot.
+      if (msg.key.fromMe === true) {
+        const alreadyTaken = this.host.consumeOwnSend(msg.key.id);
+        this.host.rememberOwnSend(msg.key.id);
+        if (alreadyTaken) {
+          this.host.logger.debug('Skipping a message this session has already reported', {
+            msgId: msg.key.id ?? 'unknown',
+            type: event.type,
+          });
+          continue;
+        }
       }
       // Throttle through the limiter so a burst of media messages can't run unbounded parallel
       // downloads (each a full decrypted buffer in heap). Ordering stays correct — the message store
@@ -356,10 +369,11 @@ export class BaileysEvents {
       // a node whose ack was lost on a drop, and the own-send path downstream dispatches message.sent
       // whatever its insert did, so the second copy has to stop here. The store is written by both
       // the inbound path below and the send path, and it survives a restart, which the registry
-      // consulted in handleMessagesUpsert does not.
-      if (msg.key.fromMe === true && msg.key.id && (await this.host.getStoredMessage(msg.key.id))) {
+      // consulted in handleMessagesUpsert does not. The read fails open (see readStoredMessage).
+      const ownMessageId = msg.key.fromMe === true ? (msg.key.id ?? null) : null;
+      if (ownMessageId !== null && (await this.readStoredMessage(ownMessageId))) {
         this.host.logger.debug('Skipping a re-delivered message this session already recorded', {
-          msgId: msg.key.id,
+          msgId: ownMessageId,
         });
         return;
       }
@@ -380,6 +394,28 @@ export class BaileysEvents {
         `Unhandled error processing inbound message (id=${msg.key?.id ?? 'unknown'}); dropping`,
         err instanceof Error ? err.message : String(err),
       );
+    }
+  }
+
+  /**
+   * The stored copy of a message id, or null when the store cannot answer.
+   *
+   * Deliberately fail-open: a locked database or a row whose JSON no longer parses must not be read
+   * as "this was never sent". The caller's only other outcome is the catch above, which drops the
+   * message outright, and Baileys acks the node before it emits the upsert, so WhatsApp does not
+   * send it again. A repeat is recoverable downstream (same idempotency key on the webhook, and the
+   * insert oracle holds the row to one); a message nobody ever hears about is not. The persist side
+   * of the same store is already written this way.
+   */
+  private async readStoredMessage(messageId: string): Promise<WAMessage | null> {
+    try {
+      return (await this.host.getStoredMessage(messageId)) ?? null;
+    } catch (err) {
+      this.host.logger.warn('Could not read the message store while checking for a repeat delivery', {
+        msgId: messageId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
     }
   }
 

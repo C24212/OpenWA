@@ -2419,6 +2419,53 @@ describe('BaileysAdapter inbound fan-out', () => {
     expect(onMessageCreate).toHaveBeenCalledTimes(1);
   });
 
+  // The store write is fire-and-forget and only issued after the dispatch, so two deliveries of one
+  // id landing before it commits both read an empty store. The id is claimed synchronously when the
+  // batch is taken, which is the only point early enough to catch them.
+  it('does not dispatch a phone-sent message twice when both deliveries land before the store commits', async () => {
+    const replayed = {
+      key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'TYPED_ON_PHONE' },
+      message: { conversation: 'replied from the phone during the outage' },
+      messageTimestamp: Math.floor(Date.now() / 1000) - 3600,
+    };
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+
+    // Both in the same tick: nothing has been written to the store in between.
+    fakeSock.fire('messages.upsert', { type: 'append', messages: [replayed] });
+    fakeSock.fire('messages.upsert', { type: 'append', messages: [replayed] });
+    await new Promise(r => setImmediate(r));
+
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+  });
+
+  // A store that cannot answer must not be read as "this was never sent": the only other outcome is
+  // the handler's catch, which drops the message, and Baileys acks the node before emitting it, so
+  // WhatsApp never sends it again. Fail open, and take the duplicate risk instead of the loss.
+  it('still delivers a phone-sent message when the message store read fails', async () => {
+    fakeStore.getMessage.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'));
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+
+    fakeSock.fire('messages.upsert', {
+      type: 'append',
+      messages: [
+        {
+          key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'TYPED_WHILE_DB_BUSY' },
+          message: { conversation: 'sent from the phone while the database was locked' },
+          messageTimestamp: Math.floor(Date.now() / 1000) - 60,
+        },
+      ],
+    });
+    await new Promise(r => setImmediate(r));
+
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('emits onMessageAck from messages.update with a neutral status', async () => {
     const onMessageAck = jest.fn();
     const adapter = newAdapter();
