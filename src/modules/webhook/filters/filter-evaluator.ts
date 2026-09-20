@@ -23,6 +23,8 @@ const canonicalActor = (jid: string, resolve?: LidResolver): string => toNeutral
 const canonicalInput = (value: string, resolve?: LidResolver): string => {
   // Bare digits are a phone-addressed user; anything else parses as a JID. Mirrors the engine's
   // user-input canonicalization (byte-identical to the former WaId.fromUserInput().toNeutral()).
+  // A group therefore has to be written as a full `<id>@g.us`: digits alone become `<digits>@c.us`
+  // and match no group, which the dashboard's chat picker avoids by storing the whole id.
   const trimmed = value.trim();
   if (trimmed && !trimmed.includes('@')) {
     return `${trimmed.replace(/\D/g, '') || trimmed}@c.us`.toLowerCase();
