@@ -795,11 +795,18 @@ export class WwebjsLifecycle {
     // The session then looks healthy, keeps delivering messages, and reports no call at all. Warn
     // once per ready rather than leaving that silent; nothing else changes, since only detection is
     // lost. Fire-and-forget: a diagnostic must never delay or fail the promotion to READY.
-    void reportMissingCallHook(
-      (this.client as unknown as { pupPage?: { evaluate: <T>(fn: () => T) => Promise<T> } } | null)?.pupPage,
-      this.host.logger,
-      this.host.config.sessionId,
-    );
+    //
+    // Skipped on a tree missing the ready-sync patch: without it the session can reach READY while
+    // that same evaluate is still running, so the probe would read a page whose hook simply has not
+    // been installed YET and warn about a problem that does not exist. An unpatched tree already
+    // reports itself at startup, which is the honest signal there.
+    if (!unappliedPatches('wwebjs').includes('patch-wwebjs-ready-sync')) {
+      void reportMissingCallHook(
+        (this.client as unknown as { pupPage?: { evaluate: <T>(fn: () => T) => Promise<T> } } | null)?.pupPage,
+        this.host.logger,
+        this.host.config.sessionId,
+      );
+    }
   }
 
   /** The single status-transition funnel: latches disconnectReported, fires the callback, re-emits

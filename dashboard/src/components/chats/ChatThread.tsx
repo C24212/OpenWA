@@ -73,9 +73,14 @@ function ChatThread({
   // overwrite the first, after which whichever settled first cleared the other's state — re-enabling
   // a button whose fetch was still open, and landing a failure marker on the wrong bubble.
   const [mediaFetch, setMediaFetch] = useState<Record<string, 'loading' | 'failed'>>({});
-  // In-flight / completed taps on inbound prompt buttons. Keyed by waMessageId so a second click
-  // on another choice of the same prompt is blocked while one request is open, and after success
-  // the whole row stays disabled (WhatsApp treats a prompt as single-choice once answered).
+  // In-flight / completed taps on inbound prompt buttons. Keyed by waMessageId so a second click on
+  // another choice of the same prompt is blocked while one request is open, and after success the
+  // row reads as answered (WhatsApp treats a prompt as single-choice once answered).
+  //
+  // Client-side and per-visit only: this is reset when the active chat changes, and a reload starts
+  // it empty, so an answered prompt becomes clickable again. The engine is the real gate, and a
+  // second click is a second reply to the same prompt, which WhatsApp accepts; persisting the
+  // answered state belongs with the message rather than in this component.
   const [buttonClick, setButtonClick] = useState<
     Record<string, { loadingId?: string; done?: boolean; selectedId?: string }>
   >({});
@@ -173,7 +178,9 @@ function ChatThread({
   }, [messagesContainerRef]);
 
   // Reset the jump button whenever the active chat changes: the new chat's content is restored by
-  // useChatScrollPosition and our listener will resync on its first scroll tick.
+  // useChatScrollPosition and our listener will resync on its first scroll tick. The prompt-answer
+  // map goes with it: its ids belong to the chat being left, and holding them would disable a
+  // button in the chat being entered if the two ever shared a message id.
   useEffect(() => {
     setShowJumpToBottom(false);
     setButtonClick({});
