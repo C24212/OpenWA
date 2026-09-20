@@ -53,6 +53,15 @@ export function toUnixSeconds(ts: number | { toNumber(): number } | null | undef
 export class BaileysHistory {
   constructor(private readonly host: BaileysHistoryHost) {}
 
+  /**
+   * Whether the address-book snapshot has been pulled for this engine instance.
+   *
+   * One pull per process is what the in-memory contact store needs: it is empty at construction and
+   * dies with the process, so every later reconnect on the same instance would re-download the whole
+   * contact collection for a store that already holds it.
+   */
+  private addressbookRestored = false;
+
   /** Post-connect socket handle (hydrateNames runs on connection 'open'). */
   private sock(): WASocket {
     return this.host.getSocket();
@@ -102,10 +111,20 @@ export class BaileysHistory {
    *
    * On a reconnect (`accountSyncCounter > 0`) Baileys skips history sync and the address-book snapshot
    * entirely: WhatsApp assumes the linked device kept its local copy. This gateway's contact store is
-   * in-memory, so a process restart leaves GET /contacts empty. When that happens we drop the stored
-   * version of the contact collection (so the next resync asks for a snapshot, not an incremental
-   * patch) and process its mutations as an initial sync, which is what emits `contacts.upsert` for the
-   * saved address book. The other collections keep the incremental resync below.
+   * in-memory, so a process restart leaves GET /contacts empty. Once per connection we therefore drop
+   * the stored version of the contact collection (so the next resync asks for a snapshot, not an
+   * incremental patch) and process its mutations as an initial sync, which is what emits
+   * `contacts.upsert` for the saved address book. The other collections keep the incremental resync
+   * below.
+   *
+   * Once per connection, not "only when no saved contact is held": during the initial sync the event
+   * buffer folds an app-state `contacts.upsert` into a `messaging-history.set` record it is already
+   * holding for that id (`absorbed contact upsert in contact set` in Baileys' event-buffer), and the
+   * whole initial sync is buffered as one batch, so those saved names arrive only inside the history
+   * event, where the handler strips `name` because a history name is a chat title. The address book
+   * is then PARTIAL rather than empty, and a count-based gate reads partial as "nothing to do" and
+   * never repairs it. The snapshot pull is the only source that cannot be absorbed, so it runs on its
+   * own schedule instead of on a count.
    */
   async hydrateNames(): Promise<void> {
     try {
@@ -135,7 +154,8 @@ export class BaileysHistory {
         return;
       }
       const alreadySynced = (this.sock().authState?.creds?.accountSyncCounter ?? 0) > 0;
-      if (alreadySynced && this.host.contactCount() === 0) {
+      if (alreadySynced && !this.addressbookRestored) {
+        this.addressbookRestored = true;
         await this.restoreAddressbookSnapshot();
       }
       await this.sock().resyncAppState(collections, false);

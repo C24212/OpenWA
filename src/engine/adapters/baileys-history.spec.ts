@@ -115,7 +115,7 @@ describe('hydrateNames', () => {
     expect(resyncAppState).toHaveBeenCalledWith([...PATCH_NAMES], false);
   });
 
-  it('re-pulls the address-book snapshot on reconnect when the in-memory store is empty', async () => {
+  it('re-pulls the address-book snapshot on the first reconnect of a process', async () => {
     // Baileys skips history + app-state snapshot once accountSyncCounter > 0. The gateway store is
     // in-memory, so a process restart would otherwise leave GET /contacts empty forever.
     const set = jest.fn().mockResolvedValue(undefined);
@@ -141,7 +141,10 @@ describe('hydrateNames', () => {
     ]);
   });
 
-  it('keeps the incremental resync on reconnect when contacts are already in memory', async () => {
+  it('pulls the snapshot even when contacts are already held, since a partial address book cannot be counted', async () => {
+    // The initial sync's buffer folds an app-state contacts.upsert into the history record of the
+    // same id, and a history name is stripped as a chat title, so saved names go missing while the
+    // store still holds plenty of contacts. A count-based gate reads that as "nothing to repair".
     const set = jest.fn().mockResolvedValue(undefined);
     const resyncAppState = jest.fn().mockResolvedValue(undefined);
     const { history: h } = history(
@@ -155,8 +158,27 @@ describe('hydrateNames', () => {
 
     await h.hydrateNames();
 
-    expect(set).not.toHaveBeenCalled();
-    expect(resyncAppState).toHaveBeenCalledWith([...PATCH_NAMES], false);
+    expect(set).toHaveBeenCalledWith({ 'app-state-sync-version': { critical_unblock_low: null } });
+    expect(resyncAppState).toHaveBeenCalledWith(['critical_unblock_low'], true);
+  });
+
+  it('pulls the snapshot once per process, not on every reconnect', async () => {
+    const set = jest.fn().mockResolvedValue(undefined);
+    const resyncAppState = jest.fn().mockResolvedValue(undefined);
+    const { history: h } = history(
+      {
+        groupFetchAllParticipating: jest.fn().mockResolvedValue({}),
+        resyncAppState,
+        authState: { creds: { accountSyncCounter: 3 }, keys: { set } },
+      },
+      { contactCount: 0 },
+    );
+
+    await h.hydrateNames();
+    await h.hydrateNames();
+
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(resyncAppState.mock.calls.filter(([, initial]) => initial === true)).toHaveLength(1);
   });
 
   it('uses the incremental resync on a first link (accountSyncCounter is still 0)', async () => {
