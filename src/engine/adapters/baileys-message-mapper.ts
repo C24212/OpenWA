@@ -343,8 +343,12 @@ export interface BaileysButtonsPromptContent {
     buttons?: Array<{
       buttonId?: string | null;
       buttonText?: { displayText?: string | null } | null;
-      /** Present on a NATIVE_FLOW button, whose `name` decides whether it can be answered at all. */
-      nativeFlowInfo?: { name?: string | null; paramsJson?: string | null } | null;
+      /**
+       * Present on a NATIVE_FLOW button. Only `name` is read, to decide whether the button can be
+       * answered at all; the params of a classic button's reply come from `buttonId`/`buttonText`
+       * beside it, not from this block.
+       */
+      nativeFlowInfo?: { name?: string | null } | null;
     } | null> | null;
   } | null;
   interactiveMessage?: {

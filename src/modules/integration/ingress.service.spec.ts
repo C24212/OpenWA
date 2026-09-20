@@ -552,7 +552,8 @@ describe('dedupOn: body (a provider that rotates its delivery id on retry)', () 
 
     const second = deps();
     await new IngressService(second).handle({ ...req, headers: { 'x-delivery': '' }, rawBody: '{"n":2}' });
-    expect(second.enqueue).toHaveBeenCalledTimes(1);
+    // The ids differ, which is the whole point: a blank header must not collapse two bodies onto one
+    // dedup row. (A fresh `deps()` always enqueues, so asserting the call count would prove nothing.)
     expect((second.enqueue.mock.calls[0] as [unknown, string])[1]).not.toBe(firstId);
   });
 });

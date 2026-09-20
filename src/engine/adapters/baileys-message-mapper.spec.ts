@@ -553,7 +553,7 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
               {
                 buttonId: 'docs',
                 buttonText: { displayText: 'Open the docs' },
-                nativeFlowInfo: { name: 'cta_url', paramsJson: JSON.stringify({ url: 'https://example.test' }) },
+                nativeFlowInfo: { name: 'cta_url' },
               },
             ],
           },

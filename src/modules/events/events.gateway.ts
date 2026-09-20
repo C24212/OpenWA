@@ -381,6 +381,9 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
       // process, holding a slot of the cap above and keeping the Socket object reachable.
       if (client.disconnected) {
         this.untrackSocket(client);
+        // Logged rather than returned silently: the disconnect handler has already written a
+        // "Client disconnected" line for a client nothing ever announced as connected.
+        this.logger.log(`Client ${client.id} authenticated after it had already gone (key: ${validKey.name})`);
         return;
       }
       this.logger.log(`Client connected: ${client.id} (key: ${validKey.name})`);
@@ -414,8 +417,9 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
    * the documented example client both do, never saw a subscribe confirmation, a pong, or any of the
    * refusals (FORBIDDEN_SESSION, INVALID_SESSION, INVALID_EVENTS, INVALID_MESSAGE).
    *
-   * A path that answered and then closed the socket keeps its own emit; emitting to a socket that is
-   * already gone is a no-op, and skipping it here keeps that frame single.
+   * A path that answered and then closed the socket keeps its own emit, and this skips it rather than
+   * emitting again: socket.io still accepts a write to a disconnected socket, so without the guard a
+   * client could be handed the same frame twice on its way out.
    */
   private reply<T>(client: Socket, frame: T): T {
     if (!client.disconnected) {

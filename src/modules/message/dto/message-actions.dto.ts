@@ -304,6 +304,9 @@ export class ClickButtonDto {
   })
   @IsString()
   @IsNotEmpty()
+  // Persisted verbatim as the message body when `text` is omitted, so it carries the same bound the
+  // label beside it does rather than an unbounded string.
+  @MaxLength(MESSAGE_TEXT_MAX_LENGTH)
   buttonId!: string;
 
   @ApiPropertyOptional({
