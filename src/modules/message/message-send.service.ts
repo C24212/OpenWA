@@ -523,12 +523,25 @@ export class MessageSendService {
     const finalDto = await this.applySendingGate(sessionId, 'click-button', dto);
     const engine = this.getEngine(sessionId);
 
+    // A click IS a reply to the prompt, so resolve the prompt's body the way reply() does: the
+    // dashboard renders the quote box from this field, and a hardcoded empty string left every
+    // answered prompt showing an empty quote above the choice the user tapped.
+    let promptBody = '';
+    try {
+      const prompt = await this.messageRepository.findOne({
+        where: { sessionId, waMessageId: finalDto.messageId },
+      });
+      promptBody = prompt?.body || '';
+    } catch (err) {
+      this.logger.warn(`Failed to resolve prompt message ${finalDto.messageId}`, { error: String(err) });
+    }
+
     const message = await this.saveOutgoingMessage(sessionId, {
       chatId: finalDto.chatId,
       body: finalDto.text || finalDto.buttonId,
       type: 'text',
       metadata: {
-        quotedMessage: { id: finalDto.messageId, body: '' },
+        quotedMessage: { id: finalDto.messageId, body: promptBody },
         button: { id: finalDto.buttonId, text: finalDto.text },
       },
     });

@@ -529,12 +529,20 @@ export function extractBaileysClickableButtons(
       content.templateMessage?.hydratedTemplate?.hydratedButtons ??
       content.templateMessage?.hydratedFourRowTemplate?.hydratedButtons ??
       [];
+    // One index namespace per prompt. `selectedIndex` goes back to the business bot verbatim, and a
+    // hydrated template numbers its buttons itself, so the array position is only a stand-in for a
+    // template that carries no numbering at all. Falling back per entry mixed the two inside one
+    // prompt, where a position can collide with another button's declared index and answer the bot
+    // with a number belonging to a different choice. An entry missing its index in a template that
+    // numbers the others cannot be answered reliably, so it is not offered.
+    const numbered = hydrated.some(entry => typeof entry?.index === 'number');
     return collectChoices(
       hydrated.map((entry, position) => {
         const quick = entry?.quickReplyButton;
         if (!quick?.displayText?.trim()) return undefined;
         const label = quick.displayText.trim();
-        const protoIndex = typeof entry?.index === 'number' ? entry.index : position;
+        const protoIndex = numbered ? entry?.index : position;
+        if (typeof protoIndex !== 'number') return undefined;
         return { id: quick.id?.trim() || label, text: label, index: protoIndex };
       }),
     );

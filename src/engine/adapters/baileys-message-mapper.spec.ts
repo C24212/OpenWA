@@ -582,6 +582,52 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
     ).toEqual([{ id: 'yes', text: 'Sim' }]);
   });
 
+  it('keeps one index namespace for a template that numbers only some of its buttons', () => {
+    // selectedIndex goes back to the business bot verbatim. Falling back to the array position for
+    // an unnumbered entry can hand the bot a number that belongs to a different button, so a
+    // template that numbers any of its buttons only offers the ones it numbered.
+    expect(
+      extractBaileysButtons(
+        {
+          templateMessage: {
+            hydratedTemplate: {
+              hydratedButtons: [
+                { index: 5, quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+                { quickReplyButton: { id: 'maybe', displayText: 'Talvez' } },
+                { index: 7, quickReplyButton: { id: 'no', displayText: 'Não' } },
+              ],
+            },
+          },
+        },
+        'templateMessage',
+      ),
+    ).toEqual([
+      { id: 'yes', text: 'Sim' },
+      { id: 'no', text: 'Não' },
+    ]);
+  });
+
+  it('numbers by array position when the template carries no indices at all', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          templateMessage: {
+            hydratedTemplate: {
+              hydratedButtons: [
+                { quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+                { quickReplyButton: { id: 'no', displayText: 'Não' } },
+              ],
+            },
+          },
+        },
+        'templateMessage',
+      ),
+    ).toEqual([
+      { id: 'yes', text: 'Sim' },
+      { id: 'no', text: 'Não' },
+    ]);
+  });
+
   it('extracts interactiveMessage native-flow quick replies', () => {
     expect(
       extractBaileysButtons(

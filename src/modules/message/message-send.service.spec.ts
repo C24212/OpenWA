@@ -1033,6 +1033,26 @@ describe('MessageSendService', () => {
       );
     });
 
+    it('quotes the prompt body so the dashboard renders the answered prompt, not an empty box', async () => {
+      // A click IS a reply to the prompt. The quote box is rendered from this metadata, and it was
+      // hardcoded empty while the reply path resolved the same field from the stored message.
+      (repository.findOne as jest.Mock).mockResolvedValueOnce({ id: 'row-1', body: 'Confirmar o pedido?' });
+
+      await service.clickButton('sess-1', {
+        chatId: 'test@c.us',
+        messageId: 'PROMPT-1',
+        buttonId: 'yes',
+      });
+
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            quotedMessage: { id: 'PROMPT-1', body: 'Confirmar o pedido?' },
+          }) as unknown,
+        }),
+      );
+    });
+
     it('routes an engine refusal through failSend so the pending row is marked failed', async () => {
       mockEngine.clickButton.mockRejectedValueOnce(
         new BadRequestException('message PROMPT-1 is not a WhatsApp Business button/list prompt that can be clicked'),
