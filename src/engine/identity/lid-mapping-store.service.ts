@@ -56,11 +56,17 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
   /** Repository fallbacks in flight, one per lid, so a hot miss path can't stack duplicate queries. */
   private readonly pendingLookups = new Set<string>();
   /**
-   * Lids the table answered for and had no row for. Without it every lookup of an unmapped lid
-   * re-queries, and the callers are on hot paths: a webhook filter resolves both the event's actor
-   * and each of its own rule values on every dispatch. Cleared for a lid the moment one is learned
-   * ({@link index}) or the whole table is reloaded, so a negative can never shadow a later mapping.
-   * Bounded by the same cap as the forward map, oldest first.
+   * Lids the table answered for and had no row for. {@link pendingLookups} collapses only the lookups
+   * that overlap a query already in flight, so without this every DISPATCH that names an unmapped lid
+   * issued a fresh query for it, and the callers are on hot paths: a webhook filter resolves both the
+   * event's actor and each of its own rule values, on every dispatch.
+   *
+   * Cleared for a lid the moment this process learns a mapping for it ({@link index}), including one
+   * learned while the query that reported the absence was still in flight, and wholesale when the
+   * table is reloaded. What it does NOT notice is a row another process writes: that mapping stays
+   * unseen here until this process learns it or reloads, exactly as a phone already cached in
+   * {@link lidToPhone} does. Bounded by the same cap as the forward map, oldest-recorded first
+   * (the forward map is ordered by recency of USE, this one by when the absence was recorded).
    */
   private readonly absentFromTable = new Set<string>();
   // 0 = unbounded (legacy behaviour). Every other long-lived map in the engine surface is bounded, so
@@ -150,7 +156,8 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
    * Repository fallback for a cache miss. Rows past the preload cap (or evicted by the LRU) are
    * still persisted, so a miss is warmed from the table: THIS lookup still returns undefined —
    * the sync read contract can't await, and callers fall back to engine re-resolution — but the
-   * next one hits. A table miss is NOT cached (a false negative would shadow a later remember);
+   * next one hits. A table miss IS remembered, so an unmapped lid stops re-querying on every
+   * lookup ({@link absentFromTable}), but only when nothing learned that lid in the meantime;
    * a read error is swallowed (the table may not exist yet), the same posture as reload().
    */
   private warmFromTable(lid: string): void {
@@ -164,7 +171,10 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
           this.index(row.lid, row.phone);
           return;
         }
-        if (!row) this.noteAbsent(lid);
+        // Same last-write-wins rule as the positive branch: if a remember() landed while this query
+        // was in flight, the query answered about a table that no longer looks like that, and an
+        // absence recorded over a live mapping would block the warm-back once the LRU evicts it.
+        if (!row && !this.lidToPhone.has(lid)) this.noteAbsent(lid);
       })
       .catch(() => undefined)
       .finally(() => this.pendingLookups.delete(lid));
@@ -188,10 +198,16 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
     this.evictIfOverCap();
   }
 
-  /** Record that the table holds no row for this lid, bounded oldest-first like the forward map. */
+  /**
+   * Record that the table holds no row for this lid, bounded oldest-recorded first.
+   *
+   * Skipped entirely when the cap is disabled: that mode is the legacy unbounded cache, and an
+   * absence set is the one map here that grows on ids a caller supplies rather than on mappings the
+   * account really has, so leaving it unbounded would be a leak an operator never opted into.
+   */
   private noteAbsent(lid: string): void {
-    this.absentFromTable.add(lid);
     if (!this.maxCachedLids) return;
+    this.absentFromTable.add(lid);
     while (this.absentFromTable.size > this.maxCachedLids) {
       const oldest = this.absentFromTable.values().next().value;
       if (oldest === undefined) break;
