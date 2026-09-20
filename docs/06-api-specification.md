@@ -6539,7 +6539,7 @@ Create a rule. **Auth:** API key (OPERATOR)
 }
 ```
 
-`400` — invalid conditions (unknown field/operator, over-limit values) or over-limit text.
+`400` — invalid conditions (unknown field/operator, over-limit values) or over-limit text. `404` when no session has this id.
 
 #### GET /api/sessions/:sessionId/automation-rules
 

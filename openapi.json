@@ -2090,6 +2090,9 @@
           },
           "400": {
             "description": "Invalid rule (bad conditions, over-limit text)."
+          },
+          "404": {
+            "description": "No session with this id."
           }
         },
         "summary": "Create an autoreply rule",
