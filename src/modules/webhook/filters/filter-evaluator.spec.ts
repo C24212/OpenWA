@@ -193,6 +193,27 @@ describe('evaluateFilters', () => {
       const f = filters({ field: 'mentions', operator: 'is', value: ['628999'] });
       expect(evaluateFilters(f, 'message.received', msg({ mentionedIds: ['111@lid', 'x@c.us'] }), resolve)).toBe(true);
     });
+
+    // A rule can hold the lid itself: the dashboard's chat picker stores whatever id the chat
+    // carries. Resolving only the payload side made the two stop agreeing as soon as the gateway
+    // learned that lid's phone, which turns an exclusion into a delivery of the excluded chat.
+    it('resolves a lid the RULE names, so it keeps matching once the phone is known', () => {
+      const resolve = (jid: string): string | null => (jid.startsWith('111@lid') ? '628999' : null);
+      const exclude = filters({ field: 'sender', operator: 'isNot', value: ['111@lid'] });
+      const fromThatPerson = msg({ from: '120@g.us', author: '111@lid', isGroup: true });
+
+      // Before the mapping is known, both sides stay a lid and the exclusion holds.
+      expect(evaluateFilters(exclude, 'message.received', fromThatPerson)).toBe(false);
+      // Once it is known, both sides resolve to the phone and the exclusion must still hold.
+      expect(evaluateFilters(exclude, 'message.received', fromThatPerson, resolve)).toBe(false);
+    });
+
+    it('resolves a lid the rule names for an inclusion too', () => {
+      const resolve = (jid: string): string | null => (jid.startsWith('111@lid') ? '628999' : null);
+      const only = filters({ field: 'sender', operator: 'is', value: ['111@lid'] });
+      const fromThatPerson = msg({ from: '120@g.us', author: '111@lid', isGroup: true });
+      expect(evaluateFilters(only, 'message.received', fromThatPerson, resolve)).toBe(true);
+    });
   });
 
   describe('chatId (conversation scoping so a webhook can allowlist specific groups)', () => {

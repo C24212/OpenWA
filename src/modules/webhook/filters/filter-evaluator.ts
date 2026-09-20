@@ -20,14 +20,18 @@ export type LidResolver = (jid: string) => string | null;
 // the same neutral string (`<phone>@c.us` / `<id>@g.us` / `<lid>@lid`). So a phone filter now matches
 // the person across user dialects AND any lid resolving to that phone - previously a silent miss.
 const canonicalActor = (jid: string, resolve?: LidResolver): string => toNeutralJid(jid, resolve).toLowerCase();
-const canonicalInput = (value: string): string => {
+const canonicalInput = (value: string, resolve?: LidResolver): string => {
   // Bare digits are a phone-addressed user; anything else parses as a JID. Mirrors the engine's
   // user-input canonicalization (byte-identical to the former WaId.fromUserInput().toNeutral()).
   const trimmed = value.trim();
   if (trimmed && !trimmed.includes('@')) {
     return `${trimmed.replace(/\D/g, '') || trimmed}@c.us`.toLowerCase();
   }
-  return toNeutralJid(trimmed).toLowerCase();
+  // Through the same resolver as the payload side. A rule can hold a lid: the dashboard's chat
+  // picker stores whatever id the chat carries. Canonicalising only one side meant the two stopped
+  // agreeing the moment the gateway learned that lid's phone, which silently flips an exclusion
+  // open and an inclusion shut, with the rule still reading correctly in the UI.
+  return toNeutralJid(trimmed, resolve).toLowerCase();
 };
 
 const toStringArray = (value: unknown): string[] =>
@@ -44,7 +48,7 @@ function evaluateCondition(
 
   switch (def.kind) {
     case 'id': {
-      const candidates = new Set(toStringArray(value).map(canonicalInput));
+      const candidates = new Set(toStringArray(value).map(v => canonicalInput(v, resolve)));
       const actual = typeof resolved === 'string' ? resolved : undefined;
       const isMatch = actual != null && candidates.has(canonicalActor(actual, resolve));
       return operator === 'isNot' ? !isMatch : isMatch;
@@ -58,7 +62,7 @@ function evaluateCondition(
     }
 
     case 'idArray': {
-      const candidates = new Set(toStringArray(value).map(canonicalInput));
+      const candidates = new Set(toStringArray(value).map(v => canonicalInput(v, resolve)));
       const actual = toStringArray(resolved).map(jid => canonicalActor(jid, resolve));
       const intersects = actual.some(v => candidates.has(v));
       return operator === 'isNot' ? !intersects : intersects;
