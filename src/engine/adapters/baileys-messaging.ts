@@ -577,7 +577,11 @@ export class BaileysMessaging {
     // content, so omitting mentions drops whatever tags the original carried.
     const editContent = { text: body, ...this.withMentions(mentions), edit: target.key };
     const sent = await this.send(jid, this.previewSafe(editContent), this.previewSafeOptions(editContent));
-    return { id: sent?.key?.id ?? messageId, timestamp: this.host.toUnixSeconds(sent?.messageTimestamp) };
+    // The edited message keeps its own id, which is what the caller asked to edit and what the stored
+    // row is keyed by. The library answers with the protocol envelope that carried the edit, and that
+    // envelope has a fresh id of its own; returning it would name a message no API can address, and
+    // would disagree with the whatsapp-web.js engine, which returns the original.
+    return { id: messageId, timestamp: this.host.toUnixSeconds(sent?.messageTimestamp) };
   }
 
   /**

@@ -3731,7 +3731,13 @@ describe('BaileysAdapter store-backed ops', () => {
 
   it('editMessage edits via the stored key and returns the (unchanged) message id', async () => {
     fakeStore.getMessage.mockResolvedValue(ownStored);
-    fakeSock.sendMessage.mockResolvedValue({ key: { ...ownStored.key }, messageTimestamp: 1700000010 });
+    // The library answers with the protocol envelope that carried the edit, which has an id of its
+    // own; the edited message keeps the id the caller passed. A mock echoing the target id back
+    // would pass whichever of the two the adapter returned.
+    fakeSock.sendMessage.mockResolvedValue({
+      key: { ...ownStored.key, id: '3EB0FRESHENVELOPE' },
+      messageTimestamp: 1700000010,
+    });
     const adapter = await ready();
     const res = await adapter.editMessage('628111@s.whatsapp.net', 'TARGET', 'edited body');
     expect(fakeSock.sendMessage).toHaveBeenCalledWith(
