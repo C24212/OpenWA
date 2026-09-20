@@ -101,10 +101,11 @@ export class BaileysHistory {
    * both are non-fatal, and DM push-names still arrive via `contacts.update` on live messages.
    *
    * On a reconnect (`accountSyncCounter > 0`) Baileys skips history sync and the address-book snapshot
-   * entirely — WhatsApp assumes the linked device kept its local copy. This gateway's contact store is
+   * entirely: WhatsApp assumes the linked device kept its local copy. This gateway's contact store is
    * in-memory, so a process restart leaves GET /contacts empty. When that happens we drop the stored
-   * app-state versions (so the next resync asks for a snapshot, not an incremental patch) and process
-   * the mutations as an initial sync, which is what emits `contacts.upsert` for the saved address book.
+   * version of the contact collection (so the next resync asks for a snapshot, not an incremental
+   * patch) and process its mutations as an initial sync, which is what emits `contacts.upsert` for the
+   * saved address book. The other collections keep the incremental resync below.
    */
   async hydrateNames(): Promise<void> {
     try {
@@ -135,8 +136,7 @@ export class BaileysHistory {
       }
       const alreadySynced = (this.sock().authState?.creds?.accountSyncCounter ?? 0) > 0;
       if (alreadySynced && this.host.contactCount() === 0) {
-        await this.restoreAddressbookSnapshot(collections);
-        return;
+        await this.restoreAddressbookSnapshot();
       }
       await this.sock().resyncAppState(collections, false);
       this.host.logger.debug('Re-synced app state for contact names', { action: 'baileys_resync_appstate' });
@@ -148,15 +148,23 @@ export class BaileysHistory {
   }
 
   /**
-   * Drop persisted app-state collection versions and resync from a snapshot so `contactAction`
-   * mutations fire again. `null` in `keys.set` is Baileys' own delete; the next resync then sets
-   * `return_snapshot` because the collection has no version. `isInitialSync: true` keeps delete-chat
-   * mutations from wiping conversations that history is not about to rebuild.
+   * The app-state collection that carries `contactAction` mutations, i.e. the saved address book
+   * (Baileys files its own contact edits under this name too). The other four collections carry chat
+   * and message actions; a snapshot of those would re-emit every archive, pin, mute and star on each
+   * restart for nothing, since only contacts are missing from the store.
    */
-  private async restoreAddressbookSnapshot(collections: Parameters<WASocket['resyncAppState']>[0]): Promise<void> {
-    const versions = Object.fromEntries(collections.map(name => [name, null]));
-    await this.sock().authState.keys.set({ 'app-state-sync-version': versions });
-    await this.sock().resyncAppState(collections, true);
+  private static readonly ADDRESSBOOK_COLLECTION = 'critical_unblock_low' as const;
+
+  /**
+   * Drop the persisted version of the contact collection and resync it from a snapshot so
+   * `contactAction` mutations fire again. `null` in `keys.set` is Baileys' own delete; the next resync
+   * then sets `return_snapshot` because the collection has no version. `isInitialSync: true` keeps
+   * delete-chat mutations from wiping conversations that history is not about to rebuild.
+   */
+  private async restoreAddressbookSnapshot(): Promise<void> {
+    const name = BaileysHistory.ADDRESSBOOK_COLLECTION;
+    await this.sock().authState.keys.set({ 'app-state-sync-version': { [name]: null } });
+    await this.sock().resyncAppState([name], true);
     this.host.logger.debug('Restored address-book snapshot after reconnect', {
       action: 'baileys_restore_addressbook',
       contacts: this.host.contactCount(),

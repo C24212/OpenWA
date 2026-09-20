@@ -131,11 +131,14 @@ describe('hydrateNames', () => {
 
     await h.hydrateNames();
 
-    expect(set).toHaveBeenCalledWith({
-      'app-state-sync-version': { critical_block: null, regular: null },
-    });
-    expect(resyncAppState).toHaveBeenCalledWith([...PATCH_NAMES], true);
-    expect(resyncAppState).toHaveBeenCalledTimes(1);
+    // Only the contact collection is snapshotted; the others keep their versions and the ordinary
+    // incremental resync still runs afterwards.
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith({ 'app-state-sync-version': { critical_unblock_low: null } });
+    expect(resyncAppState.mock.calls).toEqual([
+      [['critical_unblock_low'], true],
+      [[...PATCH_NAMES], false],
+    ]);
   });
 
   it('keeps the incremental resync on reconnect when contacts are already in memory', async () => {
