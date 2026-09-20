@@ -375,6 +375,14 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
       // this, every client behind one NAT/proxy IP shares a 10/min budget and normal dashboard
       // re-mounts lock each other out.
       this.handshakeLimiter.refund(clientIp);
+      // The transport can close while validateApiKey is in flight, and Nest runs the disconnect
+      // handler before this one returns. That untrack found no key on client.data yet and did
+      // nothing, so the socket just tracked would stay in the per-key set for the life of the
+      // process, holding a slot of the cap above and keeping the Socket object reachable.
+      if (client.disconnected) {
+        this.untrackSocket(client);
+        return;
+      }
       this.logger.log(`Client connected: ${client.id} (key: ${validKey.name})`);
     } catch (error) {
       this.logger.warn(`Client ${client.id} rejected: Auth error`, {
@@ -397,8 +405,27 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
+  /**
+   * Answer a client command on the documented `message` event, and hand the same frame back so a
+   * client that passed an ack callback still receives it.
+   *
+   * Returning alone is not enough. The Socket.IO adapter delivers a handler's return value through
+   * the ack callback and nothing else, so a client that emits without one, which the dashboard and
+   * the documented example client both do, never saw a subscribe confirmation, a pong, or any of the
+   * refusals (FORBIDDEN_SESSION, INVALID_SESSION, INVALID_EVENTS, INVALID_MESSAGE).
+   *
+   * A path that answered and then closed the socket keeps its own emit; emitting to a socket that is
+   * already gone is a no-op, and skipping it here keeps that frame single.
+   */
+  private reply<T>(client: Socket, frame: T): T {
+    if (!client.disconnected) {
+      client.emit('message', frame);
+    }
+    return frame;
+  }
+
   @SubscribeMessage('message')
-  handleMessage(@ConnectedSocket() client: Socket, @MessageBody() message: WSClientMessage) {
+  async handleMessage(@ConnectedSocket() client: Socket, @MessageBody() message: WSClientMessage) {
     // Per-key token bucket on every inbound frame. Keyed by the validated key id; a socket
     // whose handshake validation is still in flight has no key yet and is metered by IP.
     // Over-budget frames get an error frame back and are NOT dispatched to a handler — in
@@ -411,23 +438,20 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         apiKeyId: (client.data as { apiKey?: Pick<ApiKey, 'id'> } | undefined)?.apiKey?.id,
         ipAddress: this.resolveClientIp(client),
       });
-      const error = this.createError('RATE_LIMITED', 'Frame rate limit exceeded, slow down', requestId);
-      client.emit('message', error);
-      return error;
+      return this.reply(client, this.createError('RATE_LIMITED', 'Frame rate limit exceeded, slow down', requestId));
     }
 
     switch (message.type) {
       case 'subscribe':
-        return this.handleSubscribe(client, message);
+        return this.reply(client, await this.handleSubscribe(client, message));
       case 'unsubscribe':
-        return this.handleUnsubscribe(client, message);
+        return this.reply(client, this.handleUnsubscribe(client, message));
       case 'ping':
-        return this.handlePing(client, message.requestId);
+        return this.reply(client, this.handlePing(client, message.requestId));
       default:
-        return this.createError(
-          'INVALID_MESSAGE',
-          `Unknown message type`,
-          (message as { requestId?: string }).requestId,
+        return this.reply(
+          client,
+          this.createError('INVALID_MESSAGE', `Unknown message type`, (message as { requestId?: string }).requestId),
         );
     }
   }
