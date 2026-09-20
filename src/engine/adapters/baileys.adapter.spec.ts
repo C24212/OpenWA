@@ -3519,8 +3519,11 @@ describe('BaileysAdapter store-backed ops', () => {
   const ownStored = {
     key: { id: 'TARGET', remoteJid: '628111@s.whatsapp.net', fromMe: true },
     message: { conversation: 'hi' },
-    // Distinct from the edit envelope's send time below, so a spec cannot pass on either one.
-    messageTimestamp: 1700000000,
+    // A STRING, which is what the store gives back: Baileys decodes `messageTimestamp` as a Long, and
+    // a Long serializes to its decimal string, so the JSON round trip through `baileys_messages` never
+    // returns the number the proto type advertises. Also distinct from the edit envelope's send time
+    // below, so a spec cannot pass on either one.
+    messageTimestamp: '1700000000',
   };
 
   it('replyToMessage quotes the stored message', async () => {
@@ -3713,7 +3716,8 @@ describe('BaileysAdapter store-backed ops', () => {
   });
 
   it('deleteMessage for-me (forEveryone=false) deletes via chatModify({ deleteForMe })', async () => {
-    fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: 1700000007 });
+    // The stored timestamp is a STRING, which is the only shape the store returns: see toUnixSeconds.
+    fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: '1700000007' });
     const adapter = await ready();
     await adapter.deleteMessage('628111@s.whatsapp.net', 'TARGET', false);
     expect(fakeSock.chatModify).toHaveBeenCalledWith(
@@ -3721,6 +3725,17 @@ describe('BaileysAdapter store-backed ops', () => {
       '628111@s.whatsapp.net',
     );
     expect(fakeSock.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('deleteMessage for-me sends a usable timestamp when the stored one is unreadable', async () => {
+    // A row written by an older build, or hand-edited: better a slightly wrong instant than NaN on
+    // the wire, which WhatsApp would reject and which no consumer downstream can do arithmetic on.
+    fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: 'not-a-number' });
+    const adapter = await ready();
+    await adapter.deleteMessage('628111@s.whatsapp.net', 'TARGET', false);
+    const [payload] = fakeSock.chatModify.mock.calls[0] as [{ deleteForMe: { timestamp: number } }];
+    expect(Number.isFinite(payload.deleteForMe.timestamp)).toBe(true);
+    expect(payload.deleteForMe.timestamp).toBeGreaterThan(1_600_000_000);
   });
 
   it('editMessage re-applies participant tags to the new body', async () => {

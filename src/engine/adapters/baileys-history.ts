@@ -42,12 +42,30 @@ export interface BaileysHistoryHost {
   getOnHistoryMessages(): EngineEventCallbacks['onHistoryMessages'];
 }
 
-/** Baileys timestamps are `number | Long`; normalize to unix seconds. */
-export function toUnixSeconds(ts: number | { toNumber(): number } | null | undefined): number {
+/**
+ * Baileys timestamps are `number | Long`; normalize to unix seconds.
+ *
+ * A third shape reaches here that the proto type does not admit: a decimal STRING. The library
+ * decodes `messageTimestamp` as a Long, and a Long serializes to its decimal string, so every
+ * message read back out of `baileys_messages` (a JSON round trip) carries a string where the type
+ * says number. Delete-for-me and edit both read that field off a stored message, so without this
+ * arm they threw `ts.toNumber is not a function` on a shape the store always produces.
+ *
+ * A string that is not a number falls back to now, like an absent value: a timestamp is never worth
+ * failing an operation over, and NaN would poison every arithmetic consumer downstream.
+ */
+export function toUnixSeconds(ts: number | string | { toNumber(): number } | null | undefined): number {
   if (ts == null) {
     return Math.floor(Date.now() / 1000);
   }
-  return typeof ts === 'number' ? ts : ts.toNumber();
+  if (typeof ts === 'number') {
+    return ts;
+  }
+  if (typeof ts === 'string') {
+    const parsed = Number(ts);
+    return Number.isFinite(parsed) ? parsed : Math.floor(Date.now() / 1000);
+  }
+  return ts.toNumber();
 }
 
 export class BaileysHistory {
