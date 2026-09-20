@@ -380,15 +380,22 @@ export class BaileysSessionStore {
     if (parsed.kind === 'user') {
       keys.push(`${parsed.userPart}@s.whatsapp.net`, `${parsed.userPart}@c.us`);
     }
+    // One person can occupy two entries, one keyed by `@lid` and one by the phone dialect, and only
+    // one of them carries the saved name. Prefer the named one: the nameless twin answers
+    // `isMyContact: false` and no display name for somebody the account has saved.
+    let unnamed: BaileysContact | undefined;
     for (const key of keys) {
       const direct = this.contacts.get(key);
-      if (direct) {
-        return this.toNeutralContact(direct);
-      }
+      if (!direct) continue;
+      if (direct.name) return this.toNeutralContact(direct);
+      unnamed ??= direct;
     }
     if (parsed.kind !== 'user' && parsed.kind !== 'lid') {
-      return null;
+      return unnamed ? this.toNeutralContact(unnamed) : null;
     }
+    // The twin is keyed under the OTHER dialect, so a direct hit cannot reach it; the scan below
+    // can, through `lid`/`phoneNumber`. Run it even when a direct hit was found, as long as that hit
+    // was nameless, and keep the nameless one only if the scan turns up nothing better.
     const want = parsed.userPart;
     for (const c of this.contacts.values()) {
       const phone = c.phoneNumber
@@ -397,11 +404,11 @@ export class BaileysSessionStore {
           ? userPart(c.id)
           : '';
       const lid = c.lid ? userPart(c.lid) : c.id.endsWith('@lid') ? userPart(c.id) : '';
-      if (phone === want || lid === want) {
-        return this.toNeutralContact(c);
-      }
+      if (phone !== want && lid !== want) continue;
+      if (c.name) return this.toNeutralContact(c);
+      unnamed ??= c;
     }
-    return null;
+    return unnamed ? this.toNeutralContact(unnamed) : null;
   }
 
   listChats(): ChatSummary[] {

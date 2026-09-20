@@ -54,6 +54,16 @@ describe('BaileysSessionStore', () => {
     expect(store.findContact('628111@s.whatsapp.net')).toMatchObject({ name: 'Alice', pushName: 'Al' });
   });
 
+  it('prefers the named twin when one person occupies both a lid and a phone entry', () => {
+    // History sync and app state can key the same person twice. Only one entry carries the saved
+    // name, and answering with the other reported a saved contact as unknown.
+    store.upsertContacts([{ id: '111@lid', notify: 'Al' }]);
+    store.upsertContacts([{ id: '628111@s.whatsapp.net', lid: '111@lid', name: 'Alice' }]);
+
+    expect(store.findContact('111@lid')).toMatchObject({ name: 'Alice', isMyContact: true });
+    expect(store.findContact('628111@c.us')).toMatchObject({ name: 'Alice', isMyContact: true });
+  });
+
   it('accepts a contact keyed only by lid (id omitted) and finds it by phone', () => {
     store.upsertContacts([{ lid: '111@lid', phoneNumber: '628111@s.whatsapp.net', name: 'Ada' }]);
     expect(store.findContact('111@lid')?.name).toBe('Ada');
