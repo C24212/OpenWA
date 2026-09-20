@@ -6120,6 +6120,35 @@ describe('SessionService', () => {
       expect(engineStillRegistered).toEqual([false]);
     });
 
+    // logout() and forceKill() carry the same guard as stop(), and only stop() was covered: either
+    // could have lost it and the suite would have stayed green.
+    it.each([
+      ['logout', (svc: SessionService) => svc.logout('sess-uuid-1'), 'logout' as const],
+      ['forceKill', (svc: SessionService) => svc.forceKill('sess-uuid-1'), 'forceDestroy' as const],
+    ])('announces a %s only after the engine is evicted', async (_label, run, engineMethod) => {
+      const session = createMockSession();
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await service.start('sess-uuid-1');
+      const callbacks = (mockEngine.initialize.mock.calls as [EngineEventCallbacks][])[0][0];
+
+      const engineStillRegistered: boolean[] = [];
+      (eventsGateway.emitSessionStatus as jest.Mock).mockImplementation((id: string) => {
+        engineStillRegistered.push(registry.has(id));
+      });
+      mockEngine[engineMethod].mockImplementation(async () => {
+        callbacks.onStateChanged?.(EngineStatus.DISCONNECTED);
+        await Promise.resolve(); // the real teardown reports before the browser is closed
+      });
+
+      await run(service);
+
+      const emits = (eventsGateway.emitSessionStatus as jest.Mock).mock.calls as [string, SessionStatus][];
+      expect(emits.filter(c => c[1] === SessionStatus.DISCONNECTED)).toHaveLength(1);
+      expect(engineStillRegistered).toEqual([false]);
+    });
+
     // The suppression is keyed to the engine instance being torn down, so a mark left behind by a
     // stop that never ran cannot mute a later disconnect the session really had.
     it('still announces a disconnect after a stop that failed to find the session', async () => {
