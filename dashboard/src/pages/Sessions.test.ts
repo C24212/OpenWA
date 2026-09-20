@@ -814,6 +814,9 @@ test('a QR pushed while the disconnect re-read is in flight keeps the modal open
 
     // The server answer will say the engine is gone, which is what used to close the modal outright.
     Object.assign(row, { status: 'disconnected', engineLoaded: false });
+    // Counted BEFORE the push: the mount already read the list once, so waiting for "a GET happened"
+    // would be satisfied by that one and would settle before the handler's own re-read resolves.
+    const readsBeforeDisconnect = fetchCalls.filter(c => c.method === 'GET' && c.path === '/api/sessions').length;
     pushSessionStatus(row.id, 'disconnected');
 
     // A fresh code lands before that answer is applied.
@@ -831,7 +834,16 @@ test('a QR pushed while the disconnect re-read is in flight keeps the modal open
       });
     });
 
-    await waitFor(() => assert.ok(findFetchCall('GET', '/api/sessions')));
+    // The fresh code is on screen, so the push really landed in the modal that is being judged.
+    await waitFor(() =>
+      assert.equal((screen.getByAltText('QR') as HTMLImageElement).src, 'data:image/png;base64,FRESH'),
+    );
+    // And the handler's re-read has resolved, so the close decision has already been taken.
+    await waitFor(() =>
+      assert.ok(
+        fetchCalls.filter(c => c.method === 'GET' && c.path === '/api/sessions').length > readsBeforeDisconnect,
+      ),
+    );
     assert.ok(screen.queryByRole('dialog'), 'the modal closed over a QR code that had just arrived');
   } finally {
     SESSIONS.pop();

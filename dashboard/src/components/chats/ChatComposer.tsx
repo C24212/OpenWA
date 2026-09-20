@@ -89,6 +89,25 @@ function ChatComposer({
     };
   }, [activeChat.id]);
 
+  // Escape dismisses the emoji picker instead of closing the conversation behind it.
+  //
+  // On `document`, and in the capture phase, because neither alternative works: the picker is a div
+  // with no tabIndex, so an onKeyDown on it fires only when focus is already inside, and after the
+  // toggle button is clicked focus is on the button, outside. Capture also puts this ahead of the
+  // page's own Escape handler whatever order the two listeners were registered in, so the
+  // preventDefault below is what the page reads, and the room stays open without the picker having
+  // to advertise a role it does not implement.
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      event.preventDefault();
+      setShowEmojiPicker(false);
+    };
+    document.addEventListener('keydown', dismissOnEscape, true);
+    return () => document.removeEventListener('keydown', dismissOnEscape, true);
+  }, [showEmojiPicker]);
+
   // References
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -277,17 +296,10 @@ function ChatComposer({
 
       {/* Popular emojis panel */}
       {showEmojiPicker && (
-        // role="menu" is what the page's Escape handler skips, and it owes that handler the
-        // behaviour the skip assumes: Escape dismisses the picker rather than the conversation.
-        <div
-          className="chats-emoji-picker"
-          role="menu"
-          onKeyDown={event => {
-            if (event.key !== 'Escape') return;
-            event.preventDefault();
-            setShowEmojiPicker(false);
-          }}
-        >
+        // No role="menu" here: these are plain buttons with no menuitem roles, no roving focus and
+        // no arrow-key navigation, so claiming the role would promise a keyboard contract the panel
+        // does not keep. Escape is handled on document instead, see the effect above.
+        <div className="chats-emoji-picker">
           <div className="emoji-grid">
             {popularEmojis.map(emoji => (
               <button key={emoji} type="button" className="emoji-btn" onClick={() => handleEmojiClick(emoji)}>

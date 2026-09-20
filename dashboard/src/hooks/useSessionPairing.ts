@@ -192,7 +192,11 @@ export function useSessionPairing({ sessions, sessionsRef, reloadSessions }: Use
   // `onlyIfBlank` is for the one caller that decides asynchronously: the disconnect handler blanks
   // the code, asks the server whether an engine is still registered, and closes the modal on the
   // answer. A reconnect can complete inside that window and push a fresh code, and closing then
-  // would throw away a code that works. A still-blank modal means nothing has arrived since.
+  // would throw away a code that works. The guard proves only that the modal is blank right now,
+  // not that it is still the same modal that was blanked. That is enough: the only other way to be
+  // blank is a modal still loading its first code, for a session the answer just said has no engine,
+  // and closing that one is right too. A code arriving AFTER the answer is not covered, and cannot
+  // be from here; the modal is gone by then and the operator reopens it from the card.
   const dismissQrForSession = useCallback((sessionId: string, onlyIfBlank = false) => {
     setQrData(current => {
       if (current?.sessionId !== sessionId) return current;

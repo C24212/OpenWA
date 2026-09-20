@@ -514,22 +514,18 @@ test('Escape dismisses the emoji picker instead of the conversation behind it', 
   await within(container.querySelector('.room-messages') as HTMLElement).findByText('hello from alice');
 
   fireEvent.click(screen.getByTitle('Pick emoji'));
-  const picker = await waitFor(() => {
-    const found = container.querySelector('.chats-emoji-picker');
-    assert.ok(found, 'the emoji picker did not open');
-    return found as HTMLElement;
-  });
+  await waitFor(() => assert.ok(container.querySelector('.chats-emoji-picker'), 'the emoji picker did not open'));
 
-  // The page-level handler listens on document and skips anything with role="menu", so an Escape it
-  // sees while the picker is open must leave the conversation alone.
+  // Driven from document, which is where a real Escape lands: focus is on the toggle button, not
+  // inside the picker, so a handler bound to the picker element would never see this event. One
+  // press must do both things, dismiss the picker and leave the conversation open.
   fireEvent.keyDown(document, { key: 'Escape' });
-  assert.ok(screen.queryByRole('button', { name: 'Back' }), 'Escape closed the room while the picker owned it');
-  assert.ok(container.querySelector('.chats-emoji-picker'), 'the picker closed on a document-level Escape');
-
-  // And the picker owes that skip the behaviour it assumes: Escape on the picker dismisses it.
-  fireEvent.keyDown(picker, { key: 'Escape' });
   await waitFor(() => assert.equal(container.querySelector('.chats-emoji-picker'), null, 'the picker stayed open'));
-  assert.ok(screen.queryByRole('button', { name: 'Back' }), 'dismissing the picker also closed the room');
+  assert.ok(screen.queryByRole('button', { name: 'Back' }), 'Escape closed the room while the picker owned it');
+
+  // With the picker gone the key belongs to the room again, which is what it must not keep.
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => assert.equal(screen.queryByRole('button', { name: 'Back' }), null, 'the room stayed open'));
 });
 
 test('Escape closes the open room, and is left alone while a dialog owns it', async () => {
