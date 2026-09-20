@@ -11976,7 +11976,8 @@
           },
           "buttonId": {
             "type": "string",
-            "description": "Stable id of the choice to tap (inbound `buttons[].id`). URL/call CTA buttons cannot be clicked this way."
+            "description": "Stable id of the choice to tap (inbound `buttons[].id`). URL/call CTA buttons cannot be clicked this way.",
+            "maxLength": 4096
           },
           "text": {
             "type": "string",

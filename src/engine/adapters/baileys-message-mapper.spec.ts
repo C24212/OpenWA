@@ -4,6 +4,7 @@ import {
   extractBaileysBody,
   extractBaileysButtonReply,
   extractBaileysButtons,
+  extractBaileysClickableButtons,
   resolveBaileysButtonClick,
   toBaileysButtonClickContent,
   BUTTONS_MAX_ENTRIES,
@@ -584,32 +585,62 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
 
   it('keeps one index namespace for a template that numbers only some of its buttons', () => {
     // selectedIndex goes back to the business bot verbatim. Falling back to the array position for
-    // an unnumbered entry can hand the bot a number that belongs to a different button, so a
-    // template that numbers any of its buttons only offers the ones it numbered.
-    expect(
-      extractBaileysButtons(
-        {
-          templateMessage: {
-            hydratedTemplate: {
-              hydratedButtons: [
-                { index: 5, quickReplyButton: { id: 'yes', displayText: 'Sim' } },
-                { quickReplyButton: { id: 'maybe', displayText: 'Talvez' } },
-                { index: 7, quickReplyButton: { id: 'no', displayText: 'Não' } },
-              ],
-            },
-          },
+    // an unnumbered entry can hand the bot a number belonging to a different button, so an entry the
+    // template did not number carries no index at all. It is still offered: the user can see and tap
+    // it in WhatsApp, and the reply names it by id.
+    const prompt = {
+      templateMessage: {
+        hydratedTemplate: {
+          hydratedButtons: [
+            { index: 5, quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+            { quickReplyButton: { id: 'maybe', displayText: 'Talvez' } },
+            { index: 7, quickReplyButton: { id: 'no', displayText: 'Não' } },
+          ],
         },
-        'templateMessage',
-      ),
-    ).toEqual([
+      },
+    };
+    expect(extractBaileysButtons(prompt, 'templateMessage')).toEqual([
+      { id: 'yes', text: 'Sim' },
+      { id: 'maybe', text: 'Talvez' },
+      { id: 'no', text: 'Não' },
+    ]);
+    expect(extractBaileysClickableButtons(prompt, 'templateMessage')).toEqual([
+      { id: 'yes', text: 'Sim', index: 5 },
+      { id: 'maybe', text: 'Talvez', index: undefined },
+      { id: 'no', text: 'Não', index: 7 },
+    ]);
+  });
+
+  it('offers the quick replies of a template whose only numbered button is a CTA', () => {
+    // The CTA is never offered, so its index was the only thing making the prompt look numbered.
+    // Requiring an index of every entry emptied the whole prompt, which is how a visible Sim/Não
+    // pair disappeared from buttons[] and was then refused by the click route.
+    const prompt = {
+      templateMessage: {
+        hydratedTemplate: {
+          hydratedButtons: [
+            { index: 1, urlButton: { displayText: 'Open', url: 'https://example.com' } },
+            { quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+            { quickReplyButton: { id: 'no', displayText: 'Não' } },
+          ],
+        },
+      },
+    };
+    expect(extractBaileysButtons(prompt, 'templateMessage')).toEqual([
       { id: 'yes', text: 'Sim' },
       { id: 'no', text: 'Não' },
+    ]);
+    expect(extractBaileysClickableButtons(prompt, 'templateMessage')).toEqual([
+      { id: 'yes', text: 'Sim', index: undefined },
+      { id: 'no', text: 'Não', index: undefined },
     ]);
   });
 
   it('numbers by array position when the template carries no indices at all', () => {
+    // Asserted through the clickable list, which keeps the index; extractBaileysButtons projects it
+    // away, so it cannot tell a correct position from any other number.
     expect(
-      extractBaileysButtons(
+      extractBaileysClickableButtons(
         {
           templateMessage: {
             hydratedTemplate: {
@@ -623,8 +654,8 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
         'templateMessage',
       ),
     ).toEqual([
-      { id: 'yes', text: 'Sim' },
-      { id: 'no', text: 'Não' },
+      { id: 'yes', text: 'Sim', index: 0 },
+      { id: 'no', text: 'Não', index: 1 },
     ]);
   });
 
@@ -760,6 +791,38 @@ describe('resolveBaileysButtonClick (API click against a stored prompt)', () => 
         content: {
           buttonReply: { displayText: 'Sim', id: 'yes', index: 0 },
           type: 'plain',
+        },
+      },
+    });
+  });
+
+  it('answers a choice a numbered template left unnumbered with no selectedIndex', () => {
+    // `selectedIndex` has explicit presence on the wire and Baileys drops an undefined field before
+    // encoding, so the bot receives the id and the label and no number at all, which is honest.
+    // Fabricating a position here could name a different button in the template's own numbering.
+    const result = resolveBaileysButtonClick(
+      {
+        templateMessage: {
+          hydratedTemplate: {
+            hydratedButtons: [
+              { index: 5, quickReplyButton: { id: 'yes', displayText: 'Sim' } },
+              { quickReplyButton: { id: 'maybe', displayText: 'Talvez' } },
+            ],
+          },
+        },
+      },
+      'templateMessage',
+      'maybe',
+    );
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        id: 'maybe',
+        text: 'Talvez',
+        index: undefined,
+        content: {
+          buttonReply: { displayText: 'Talvez', id: 'maybe', index: undefined },
+          type: 'template',
         },
       },
     });

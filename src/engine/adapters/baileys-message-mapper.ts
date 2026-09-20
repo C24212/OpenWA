@@ -397,8 +397,13 @@ const CLICKABLE_NATIVE_FLOW_NAMES = new Set(['quick_reply', 'button_click']);
 export interface BaileysClickableChoice {
   id: string;
   text: string;
-  /** `proto.IHydratedTemplateButton.index` when present; otherwise the choice's position. */
-  index: number;
+  /**
+   * `proto.IHydratedTemplateButton.index` when the prompt declares one, otherwise the choice's
+   * position. Undefined only for a hydrated template that numbers some of its buttons and not this
+   * one: the reply then omits `selectedIndex` rather than inventing a number that belongs to a
+   * different button. Every other prompt shape numbers by position, so it is always set there.
+   */
+  index?: number;
 }
 
 /**
@@ -428,8 +433,11 @@ export type BaileysButtonClickError = 'not_a_prompt' | 'unknown_button';
 export interface BaileysButtonClickPayload {
   id: string;
   text: string;
-  /** Index into template hydrated buttons when the prompt is a template; otherwise the choice's position. */
-  index: number;
+  /**
+   * Index into template hydrated buttons when the prompt is a template; otherwise the choice's
+   * position. Absent for a choice a numbered template left unnumbered, see {@link BaileysClickableChoice}.
+   */
+  index?: number;
   /** `AnyMessageContent` fragment: `{buttonReply,type}` or `{listReply}`. */
   content: Record<string, unknown>;
 }
@@ -537,8 +545,14 @@ export function extractBaileysClickableButtons(
     // hydrated template numbers its buttons itself, so the array position is only a stand-in for a
     // template that carries no numbering at all. Falling back per entry mixed the two inside one
     // prompt, where a position can collide with another button's declared index and answer the bot
-    // with a number belonging to a different choice. An entry missing its index in a template that
-    // numbers the others cannot be answered reliably, so it is not offered.
+    // with a number belonging to a different choice.
+    //
+    // An entry the template left unnumbered is still offered, with no index of its own: the field
+    // has explicit presence on the wire, so the reply carries the id and the label and simply omits
+    // `selectedIndex`. Dropping the choice instead would hide a button the user can see and tap in
+    // WhatsApp, and refuse it through the click route, which is a worse answer than one honest
+    // reply that names itself by id. The unnumbered case includes a template whose only numbered
+    // button is a url or call CTA, which is never offered here in the first place.
     const numbered = hydrated.some(entry => typeof entry?.index === 'number');
     return collectChoices(
       hydrated.map((entry, position) => {
@@ -546,8 +560,11 @@ export function extractBaileysClickableButtons(
         if (!quick?.displayText?.trim()) return undefined;
         const label = quick.displayText.trim();
         const protoIndex = numbered ? entry?.index : position;
-        if (typeof protoIndex !== 'number') return undefined;
-        return { id: quick.id?.trim() || label, text: label, index: protoIndex };
+        return {
+          id: quick.id?.trim() || label,
+          text: label,
+          index: typeof protoIndex === 'number' ? protoIndex : undefined,
+        };
       }),
     );
   }
@@ -590,7 +607,7 @@ export function toBaileysButtonClickContent(
   contentType: string,
   buttonId: string,
   text: string,
-  index: number,
+  index: number | undefined,
 ): Record<string, unknown> {
   switch (contentType) {
     case 'buttonsMessage':

@@ -301,6 +301,7 @@ export class ClickButtonDto {
   @ApiProperty({
     description:
       'Stable id of the choice to tap (inbound `buttons[].id`). URL/call CTA buttons cannot be clicked this way.',
+    maxLength: MESSAGE_TEXT_MAX_LENGTH,
   })
   @IsString()
   @IsNotEmpty()

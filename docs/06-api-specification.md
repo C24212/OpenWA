@@ -2050,7 +2050,7 @@ Tap a choice on a WhatsApp Business button / list prompt by sending the structur
 | --------- | ------ | -------- | ------------------- | ---------------------------------------------------------------------------- |
 | chatId    | string | Yes      | non-empty           | Chat that holds the prompt                                                   |
 | messageId | string | Yes      | non-empty           | WhatsApp id of the inbound prompt (`buttons` on `message.received`)          |
-| buttonId  | string | Yes      | non-empty           | Stable id of the choice (`buttons[].id`)                                     |
+| buttonId  | string | Yes      | non-empty, max 4096 | Stable id of the choice (`buttons[].id`)                                     |
 | text      | string | No       | non-empty, max 4096 | Visible label; resolved from the stored prompt when omitted, else `buttonId` |
 
 ```json
