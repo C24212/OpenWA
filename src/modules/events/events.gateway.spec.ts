@@ -235,6 +235,19 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
     sock.emit.mockClear();
     const pong = await gateway.handleMessage(asSocket(sock), { type: 'ping' } as unknown as WSClientMessage);
     expect(sock.emit).toHaveBeenCalledWith('message', pong);
+
+    sock.emit.mockClear();
+    const unsubscribed = await gateway.handleMessage(asSocket(sock), {
+      type: 'unsubscribe',
+      sessionId: 'sess-1',
+      events: ['message.received'],
+    } as unknown as WSClientMessage);
+    expect(sock.emit).toHaveBeenCalledWith('message', unsubscribed);
+
+    sock.emit.mockClear();
+    const unknown = await gateway.handleMessage(asSocket(sock), { type: 'nonsense' } as unknown as WSClientMessage);
+    expect((unknown as WSErrorResponse).code).toBe('INVALID_MESSAGE');
+    expect(sock.emit).toHaveBeenCalledWith('message', unknown);
   });
 
   it('forbids a session-scoped key from subscribing to the * wildcard', async () => {

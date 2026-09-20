@@ -601,6 +601,23 @@ describe('BaileysSessionStore', () => {
       expect(s.findContact('628222@s.whatsapp.net')).toBeNull();
     });
 
+    it('still caches peers once the saved contacts alone fill the cap', () => {
+      // The cap governs the peer population. Measuring the whole map instead made a full address
+      // book evict each new peer in the very call that inserted it, so `GET /contacts/:id` stopped
+      // resolving anyone who is not saved, and chat titles fell back to the raw number.
+      const s = storeWithCap('2');
+      s.upsertContacts([{ id: '628111@s.whatsapp.net', name: 'Alice' }]);
+      s.upsertContacts([{ id: '628222@s.whatsapp.net', name: 'Bob' }]);
+
+      s.upsertContacts([{ id: '629001@s.whatsapp.net', notify: 'peer one' }]);
+      s.upsertContacts([{ id: '629002@s.whatsapp.net', notify: 'peer two' }]);
+
+      expect(s.findContact('629001@s.whatsapp.net')?.pushName).toBe('peer one');
+      expect(s.findContact('629002@s.whatsapp.net')?.pushName).toBe('peer two');
+      expect(s.findContact('628111@s.whatsapp.net')?.name).toBe('Alice');
+      expect(s.findContact('628222@s.whatsapp.net')?.name).toBe('Bob');
+    });
+
     it('keeps the saved address book when unsaved peers overflow the cap', () => {
       // The two populations share one map: a handful of contacts the account saved, and every peer
       // seen once in a group or a broadcast. Only the second grows without limit, and it used to
@@ -693,6 +710,8 @@ describe('BaileysSessionStore', () => {
       // Unsaved peers: the cap governs exactly this population (a saved contact is pinned).
       s.upsertContacts(Array.from({ length: 5001 }, (_, i) => ({ id: `62${100000 + i}@s.whatsapp.net`, notify: 'x' })));
       expect(s.findContact('62100000@s.whatsapp.net')).toBeNull(); // the oldest went first
+      // Only the oldest: one entry over a 5000 cap evicts exactly one, which is what pins the default.
+      expect(s.findContact('62100001@s.whatsapp.net')).not.toBeNull();
       expect(s.findContact('62105000@s.whatsapp.net')).not.toBeNull();
     });
 
@@ -700,6 +719,7 @@ describe('BaileysSessionStore', () => {
       const s = storeWithCap('');
       s.upsertContacts(Array.from({ length: 5001 }, (_, i) => ({ id: `62${100000 + i}@s.whatsapp.net`, notify: 'x' })));
       expect(s.findContact('62100000@s.whatsapp.net')).toBeNull();
+      expect(s.findContact('62100001@s.whatsapp.net')).not.toBeNull();
       expect(s.findContact('62105000@s.whatsapp.net')).not.toBeNull();
     });
   });

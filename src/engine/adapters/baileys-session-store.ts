@@ -21,18 +21,41 @@ export const SESSION_STORE_MAP_CAP_DEFAULT = 5000;
  * write re-inserts the key at the most-recent end, and a set evicts the least-recently-used entry
  * while over `max`. `max = 0` means unbounded.
  *
- * `pinned` marks entries an eviction must skip while any unpinned entry is older. It exists for the
- * contacts map, where two populations share one cap: the account's own address book, which the
- * operator curated and which the API reports, and a much larger stream of peers seen once in a group
- * or a broadcast. Without it the second evicts the first.
+ * `pinned` marks entries eviction may never take. It exists for the contacts map, where two
+ * populations share one structure: the account's own address book, which the operator curated and
+ * which the API reports, and a much larger stream of peers seen once in a group or a broadcast.
+ * Without it the second evicts the first.
+ *
+ * The cap then governs the UNPINNED population alone, which is the one that grows from peer traffic.
+ * Counting the whole map instead would make a full address book evict each new peer in the same call
+ * that inserted it, so peers would stop being cached at all once the saved set reached the cap. The
+ * pinned side is bounded by the account's own contact list rather than by this number.
  */
 class LruMap<K, V> {
   private readonly map = new Map<K, V>();
+
+  /** Entries the predicate does not protect. The cap is measured against exactly these. */
+  private unpinned = 0;
 
   constructor(
     private readonly max: number,
     private readonly pinned?: (value: V) => boolean,
   ) {}
+
+  private isPinned(value: V): boolean {
+    return this.pinned ? this.pinned(value) : false;
+  }
+
+  /** Remove a key while keeping {@link unpinned} honest. No-op for a key that is not held. */
+  private drop(key: K): void {
+    if (!this.map.has(key)) {
+      return;
+    }
+    if (!this.isPinned(this.map.get(key) as V)) {
+      this.unpinned--;
+    }
+    this.map.delete(key);
+  }
 
   has(key: K): boolean {
     return this.map.has(key);
@@ -49,17 +72,20 @@ class LruMap<K, V> {
   }
 
   set(key: K, value: V): void {
-    this.map.delete(key);
+    this.drop(key);
     this.map.set(key, value);
+    if (!this.isPinned(value)) {
+      this.unpinned++;
+    }
     if (!this.max) {
       return;
     }
-    while (this.map.size > this.max) {
+    while (this.unpinned > this.max) {
       const victim = this.oldestEvictable();
       if (victim === undefined) {
-        break; // every entry is pinned: keep them all rather than drop curated data
+        break; // unreachable while unpinned > 0, and a safe stop if it ever is not
       }
-      this.map.delete(victim);
+      this.drop(victim);
     }
   }
 

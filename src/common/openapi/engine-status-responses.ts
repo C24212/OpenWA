@@ -46,17 +46,18 @@ export const PAIRING_NOT_READY_409 =
 /**
  * `EngineTransportError` (503) on `POST /sessions/:sessionId/pairing-code`, where the whatsapp-web.js
  * engine bounds each attempt and retries the navigation shapes: WhatsApp Web reloads its QR page every
- * few seconds while unpaired, so a request can land mid-navigation. Only an exhausted retry budget is
- * reported here. A refusal WhatsApp itself sends is not navigation-shaped and propagates on the first
- * attempt instead.
+ * few seconds while unpaired, so a request can land mid-navigation. Only an exhausted budget is
+ * reported here, and an attempt can exhaust it on a bare timeout with no navigation behind it, so the
+ * description says what the gateway knows rather than naming a cause. A refusal WhatsApp itself sends
+ * is not navigation-shaped and propagates on the first attempt instead.
  */
 export const PAIRING_TRANSPORT_503 =
   'The pairing code could not be generated: the gateway stopped waiting after its attempt budget, ' +
   'usually because WhatsApp Web kept reloading its QR page. The condition is transient and the ' +
   "request is worth retrying; the last attempt's reason is carried in the message. An attempt that " +
-  'timed out may still have reached WhatsApp, and a retry starts the linking flow again, so the ' +
-  'unlink warning on this route applies to the retry too. The Baileys engine does not answer this, ' +
-  'having no page to reload.';
+  'timed out may still have reached WhatsApp, and a retry starts the linking flow again, with the ' +
+  'same risk of unlinking an already-linked device that this route carries generally. The Baileys ' +
+  'engine does not answer this, having no page to reload.';
 
 /**
  * The catalog and status services pass a `NotFoundException` factory to `EngineRegistry.require()`

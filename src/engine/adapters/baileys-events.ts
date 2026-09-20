@@ -119,8 +119,6 @@ export interface BaileysEventsHost {
    * is arriving; false for anything the session did not send (see OwnSendRegistry).
    */
   consumeOwnSend(id: string | null | undefined): boolean;
-  /** Claim an id for {@link consumeOwnSend}, so the next delivery carrying it is taken as a repeat. */
-  rememberOwnSend(id: string | null | undefined): void;
   /** A message this session already delivered or sent, from the persistent store; undefined without a store. */
   getStoredMessage(messageId: string): Promise<WAMessage | null> | undefined;
   /** The currently-registered onMessage callback, if any (assigned at initialize()). */
@@ -179,22 +177,20 @@ export class BaileysEvents {
       // why the echo has to be caught here, and why a fromMe message the store already holds is
       // dropped in processInboundMessage before it can be reported a second time.
       //
-      // One gate catches both repeats. `consume` is true for the echo of a send this session made
-      // through the API, whose id the send path recorded, and for a second delivery of a fromMe
-      // message this handler has already taken, because it claims the id below. Claiming is what
-      // makes the second case work: the store check in processInboundMessage sits behind an await
-      // and can only see ids the store has committed, so two deliveries landing inside that window
-      // would both be reported. This runs before any await, so they cannot.
-      if (msg.key.fromMe === true) {
-        const alreadyTaken = this.host.consumeOwnSend(msg.key.id);
-        this.host.rememberOwnSend(msg.key.id);
-        if (alreadyTaken) {
-          this.host.logger.debug('Skipping a message this session has already reported', {
-            msgId: msg.key.id ?? 'unknown',
-            type: event.type,
-          });
-          continue;
-        }
+      // Only ids this session SENT are consumed here. Claiming every inbound fromMe id instead, to
+      // close the window where two deliveries of one id arrive before the store write commits, costs
+      // more than it buys: a first delivery that reports nothing (a partial decrypt arrives as
+      // protocol noise and is dropped below) would claim the id, and the decryption-retry delivery
+      // that carries the real body would then be swallowed as a repeat and the message lost. A
+      // repeat inside that narrow window is a duplicate, which the webhook idempotency key and the
+      // insert oracle both absorb; a loss is not recoverable, because Baileys acks the node before
+      // it emits the upsert.
+      if (msg.key.fromMe === true && this.host.consumeOwnSend(msg.key.id)) {
+        this.host.logger.debug('Skipping the echo of a message this session sent', {
+          msgId: msg.key.id ?? 'unknown',
+          type: event.type,
+        });
+        continue;
       }
       // Throttle through the limiter so a burst of media messages can't run unbounded parallel
       // downloads (each a full decrypted buffer in heap). Ordering stays correct — the message store
@@ -403,9 +399,10 @@ export class BaileysEvents {
    * Deliberately fail-open: a locked database or a row whose JSON no longer parses must not be read
    * as "this was never sent". The caller's only other outcome is the catch above, which drops the
    * message outright, and Baileys acks the node before it emits the upsert, so WhatsApp does not
-   * send it again. A repeat is recoverable downstream (same idempotency key on the webhook, and the
-   * insert oracle holds the row to one); a message nobody ever hears about is not. The persist side
-   * of the same store is already written this way.
+   * send it again. A repeat is absorbed where it matters: the webhook carries the same idempotency
+   * key and the insert oracle holds the row to one. A WebSocket subscriber does see the frame twice,
+   * which is the price paid here deliberately, because a message nobody ever hears about cannot be
+   * recovered at all. The persist side of the same store is already written this way.
    */
   private async readStoredMessage(messageId: string): Promise<WAMessage | null> {
     try {

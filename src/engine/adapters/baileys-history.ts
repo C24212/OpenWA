@@ -31,9 +31,9 @@ export interface BaileysHistoryHost {
   upsertContacts(records: Partial<BaileysContact>[]): void;
   upsertChats(records: Partial<Chat>[]): void;
   /**
-   * How many contacts the in-memory session store currently holds. Used to decide whether a
-   * reconnect must re-pull the address-book snapshot (Baileys skips history + app-state snapshot
-   * once `accountSyncCounter > 0`, and this store does not survive a process restart).
+   * How many saved contacts the in-memory session store currently holds. Reported alongside the
+   * address-book restore so a log line says what the pull was worth; it does not decide whether the
+   * pull happens, because a partial address book counts as plenty (see restoreAddressbookSnapshot).
    */
   contactCount(): number;
   /** The chat's cached disappearing-messages timer extraction (`msg.ephemeralDuration` primary). */
@@ -111,13 +111,13 @@ export class BaileysHistory {
    *
    * On a reconnect (`accountSyncCounter > 0`) Baileys skips history sync and the address-book snapshot
    * entirely: WhatsApp assumes the linked device kept its local copy. This gateway's contact store is
-   * in-memory, so a process restart leaves GET /contacts empty. Once per connection we therefore drop
+   * in-memory, so a process restart leaves GET /contacts empty. Once per engine instance we therefore drop
    * the stored version of the contact collection (so the next resync asks for a snapshot, not an
    * incremental patch) and process its mutations as an initial sync, which is what emits
    * `contacts.upsert` for the saved address book. The other collections keep the incremental resync
    * below.
    *
-   * Once per connection, not "only when no saved contact is held": during the initial sync the event
+   * Once per engine instance, not "only when no saved contact is held": during the initial sync the event
    * buffer folds an app-state `contacts.upsert` into a `messaging-history.set` record it is already
    * holding for that id (`absorbed contact upsert in contact set` in Baileys' event-buffer), and the
    * whole initial sync is buffered as one batch, so those saved names arrive only inside the history
@@ -155,8 +155,15 @@ export class BaileysHistory {
       }
       const alreadySynced = (this.sock().authState?.creds?.accountSyncCounter ?? 0) > 0;
       if (alreadySynced && !this.addressbookRestored) {
+        // Set before the await so a second connect cannot start a concurrent pull, and cleared again
+        // if it fails, so one bad attempt does not count as the one pull this instance gets.
         this.addressbookRestored = true;
-        await this.restoreAddressbookSnapshot();
+        try {
+          await this.restoreAddressbookSnapshot();
+        } catch (err) {
+          this.addressbookRestored = false;
+          throw err;
+        }
       }
       await this.sock().resyncAppState(collections, false);
       this.host.logger.debug('Re-synced app state for contact names', { action: 'baileys_resync_appstate' });
