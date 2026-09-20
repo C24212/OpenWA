@@ -229,6 +229,43 @@ describe('LidMappingStoreService — deterministic preload + repository fallback
     expect(store.getCached('lid-a')).toBe('620001');
   });
 
+  it('stops re-querying the table for a lid it has no row for', async () => {
+    // The callers are hot: a webhook filter resolves the event's actor AND each of its own rule
+    // values on every dispatch, so an unmapped lid used to mean one query per event per webhook.
+    const repo = makeFakeRepo(); // empty table: every lookup misses
+    const store = new LidMappingStoreService(repo as unknown as Repository<LidMapping>);
+
+    expect(store.getCached('lid-absent')).toBeUndefined();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(repo.findOne).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 5; i++) {
+      expect(store.getCached('lid-absent')).toBeUndefined();
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    expect(repo.findOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('a recorded absence never shadows a mapping learned afterwards, even once it is evicted', async () => {
+    // The forward map answers a learned mapping directly, so the absence only matters after the
+    // entry is evicted: a stale one would block the warm-back and make the row unresolvable for
+    // the life of the process, although it is still in the table.
+    process.env.LID_MAPPING_CACHE_MAX = '1';
+    const repo = makeFakeRepo();
+    const store = new LidMappingStoreService(repo as unknown as Repository<LidMapping>);
+    await store.onModuleInit();
+
+    expect(store.getCached('lid-late')).toBeUndefined(); // records the absence
+    await new Promise(resolve => setImmediate(resolve));
+
+    await store.remember('lid-late', '620009');
+    await store.remember('lid-other', '620010'); // evicts lid-late (cap 1); its row stays persisted
+
+    expect(store.getCached('lid-late')).toBeUndefined(); // the miss itself stays a miss
+    await new Promise(resolve => setImmediate(resolve));
+    expect(store.getCached('lid-late')).toBe('620009'); // warmed back rather than blocked
+  });
+
   it('swallows a fallback read error (table unavailable) — the miss stays a miss and never throws', async () => {
     const repo = makeFakeRepo();
     repo.findOne.mockRejectedValueOnce(new Error('no such table: lid_mappings'));

@@ -55,6 +55,14 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
   private readonly phoneToLids = new Map<string, Set<string>>();
   /** Repository fallbacks in flight, one per lid, so a hot miss path can't stack duplicate queries. */
   private readonly pendingLookups = new Set<string>();
+  /**
+   * Lids the table answered for and had no row for. Without it every lookup of an unmapped lid
+   * re-queries, and the callers are on hot paths: a webhook filter resolves both the event's actor
+   * and each of its own rule values on every dispatch. Cleared for a lid the moment one is learned
+   * ({@link index}) or the whole table is reloaded, so a negative can never shadow a later mapping.
+   * Bounded by the same cap as the forward map, oldest first.
+   */
+  private readonly absentFromTable = new Set<string>();
   // 0 = unbounded (legacy behaviour). Every other long-lived map in the engine surface is bounded, so
   // the default is finite; the env override exists for operators who explicitly want the old behaviour.
   private readonly maxCachedLids: number;
@@ -89,6 +97,8 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
       });
       this.lidToPhone.clear();
       this.phoneToLids.clear();
+      // A reload re-reads the table, so every recorded absence is a fresh question again.
+      this.absentFromTable.clear();
       for (const row of rows) {
         this.index(row.lid, row.phone);
       }
@@ -144,7 +154,7 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
    * a read error is swallowed (the table may not exist yet), the same posture as reload().
    */
   private warmFromTable(lid: string): void {
-    if (!lid || this.pendingLookups.has(lid)) return;
+    if (!lid || this.pendingLookups.has(lid) || this.absentFromTable.has(lid)) return;
     this.pendingLookups.add(lid);
     void this.repo
       .findOne({ where: { lid } })
@@ -152,7 +162,9 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
         // Last-write-wins: a remember() that landed while the lookup was in flight is newer.
         if (row && !this.lidToPhone.has(row.lid)) {
           this.index(row.lid, row.phone);
+          return;
         }
+        if (!row) this.noteAbsent(lid);
       })
       .catch(() => undefined)
       .finally(() => this.pendingLookups.delete(lid));
@@ -172,7 +184,19 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
       set.add(lid);
       this.phoneToLids.set(phone, set);
     }
+    this.absentFromTable.delete(lid);
     this.evictIfOverCap();
+  }
+
+  /** Record that the table holds no row for this lid, bounded oldest-first like the forward map. */
+  private noteAbsent(lid: string): void {
+    this.absentFromTable.add(lid);
+    if (!this.maxCachedLids) return;
+    while (this.absentFromTable.size > this.maxCachedLids) {
+      const oldest = this.absentFromTable.values().next().value;
+      if (oldest === undefined) break;
+      this.absentFromTable.delete(oldest);
+    }
   }
 
   /** Evict the least-recently-used forward entry (and its reverse index) while over the cap. */
