@@ -11,7 +11,9 @@ import { BaileysHistory, BaileysHistoryHost } from './baileys-history';
  * promise that does not settle, with the clock advanced past the budget.
  */
 
-const PATCH_NAMES = ['critical_block', 'regular'] as const;
+// The real ALL_WA_PATCH_NAMES, so the snapshot pull below is asserted against the collection the
+// code actually names rather than against a list contrived to exclude it.
+const PATCH_NAMES = ['critical_block', 'critical_unblock_low', 'regular_high', 'regular_low', 'regular'] as const;
 
 function history(sock: Record<string, unknown> = {}, opts: { contactCount?: number } = {}) {
   const logger = { warn: jest.fn(), debug: jest.fn(), info: jest.fn(), error: jest.fn() };
