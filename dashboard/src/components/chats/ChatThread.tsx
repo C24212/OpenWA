@@ -78,9 +78,10 @@ function ChatThread({
   // row reads as answered (WhatsApp treats a prompt as single-choice once answered).
   //
   // Client-side and per-visit only: this is reset when the active chat changes, and a reload starts
-  // it empty, so an answered prompt becomes clickable again. The engine is the real gate, and a
-  // second click is a second reply to the same prompt, which WhatsApp accepts; persisting the
-  // answered state belongs with the message rather than in this component.
+  // it empty, so an answered prompt becomes clickable again. Nothing below this component refuses a
+  // second answer, and WhatsApp accepts it as another reply to the same prompt, so the flag is a
+  // courtesy against a double click rather than a guarantee; making it durable means persisting the
+  // answered state with the message, not widening this state.
   const [buttonClick, setButtonClick] = useState<
     Record<string, { loadingId?: string; done?: boolean; selectedId?: string }>
   >({});

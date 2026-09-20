@@ -788,13 +788,15 @@ export class WwebjsLifecycle {
     // gets the companion unlinked (~5m later → disconnected: LOGOUT, #982). Dismiss it best-effort
     // and fall back to ACTION_REQUIRED. Started after READY so a non-ready session never arms it.
     this.host.startOnboardingWatcher();
-    // whatsapp-web.js installs its incoming-call hook part-way through the same page evaluate that
-    // registers the message listeners, and that evaluate has no try/catch: a module that stops
-    // resolving before it leaves the message bridge live and the call hook absent (and takes the
-    // chat listeners registered after it as well).
-    // The session then looks healthy, keeps delivering messages, and reports no call at all. Warn
-    // once per ready rather than leaving that silent; nothing else changes, since only detection is
-    // lost. Fire-and-forget: a diagnostic must never delay or fail the promotion to READY.
+    // whatsapp-web.js installs its incoming-call hook inside a conditional, part-way through the
+    // page evaluate that registers its listeners: it patches the call collection only when the page
+    // exposes one shaped the way it expects. A WhatsApp Web build that moves or renames that
+    // collection skips the hook while the rest of the evaluate completes, so the session looks
+    // healthy, keeps delivering messages, and reports no call at all. (A stall inside that evaluate
+    // is a different, noisier shape: the inbound message bridge is registered AFTER the call hook,
+    // so it would take message delivery with it.) Warn once per ready rather than leaving the quiet
+    // case silent; nothing else changes, since only detection is lost. Fire-and-forget: a
+    // diagnostic must never delay or fail the promotion to READY.
     //
     // Skipped on a tree missing the ready-sync patch: without it the session can reach READY while
     // that same evaluate is still running, so the probe would read a page whose hook simply has not
@@ -1079,13 +1081,13 @@ export class WwebjsLifecycle {
           throw error;
         }
         if (attempt < PAIRING_CODE_MAX_ATTEMPTS) {
-          // The race abandons the losing attempt, it does not cancel it: the library's in-page
-          // linking flow keeps running, and it arms an interval that re-requests a code every few
-          // minutes. Starting the next attempt on top of that leaves two flows competing over one
-          // device slot. Ask the library to stop the abandoned one first, best-effort: it is itself a
-          // page evaluate, and the page is exactly what is unwell here, so its own failure must not
-          // replace the transient reason this retry exists for.
-          await this.cancelAbandonedPairing();
+          // Nothing cancels the abandoned attempt, and nothing needs to. The library's own
+          // requestPairingCode clears the in-page re-request interval as the first act of its
+          // evaluate, so the next attempt stops the previous flow itself. Its `cancelPairingCode`
+          // would on top of that return the page to QR mode, which is the opposite of what a retry
+          // wants, and it is an unbounded page evaluate against the page that is already unwell, so
+          // awaiting it would add a full Puppeteer protocol timeout to each gap. What the abandoned
+          // flow does reach is the library's own CODE_RECEIVED event, which nothing here listens to.
           await new Promise<void>(resolve => {
             const t = setTimeout(resolve, PAIRING_CODE_RETRY_DELAY_MS);
             t.unref?.();
@@ -1109,25 +1111,5 @@ export class WwebjsLifecycle {
       `Pairing code could not be generated after ${PAIRING_CODE_MAX_ATTEMPTS} attempts: ` +
         `${lastError instanceof Error ? lastError.message : String(lastError)}`,
     );
-  }
-
-  /**
-   * Stop a pairing flow whose attempt was abandoned, so the next attempt does not run beside it.
-   *
-   * The library's own cancel clears the in-page re-request interval and returns the page to QR mode.
-   * Best-effort in every direction: the method is absent on older builds, and it is a page evaluate
-   * against the page that just failed, so neither its absence nor its failure may surface here.
-   */
-  private async cancelAbandonedPairing(): Promise<void> {
-    const cancel = (this.client as unknown as { cancelPairingCode?: () => Promise<void> } | null)?.cancelPairingCode;
-    if (typeof cancel !== 'function') return;
-    try {
-      await cancel.call(this.client);
-    } catch (error) {
-      this.host.logger.debug('Could not cancel the abandoned pairing attempt', {
-        sessionId: this.host.config.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 }

@@ -16,14 +16,14 @@ import type { Client } from 'whatsapp-web.js';
  * The call now bounds each attempt and retries the navigation/timeout shapes while still at QR_READY,
  * so the dashboard gets a code instead of sitting on "Creating pairing code..." forever.
  */
-function makeLifecycle(requestPairingCode: jest.Mock, cancelPairingCode?: jest.Mock): WwebjsLifecycle {
+function makeLifecycle(requestPairingCode: jest.Mock): WwebjsLifecycle {
   const host = {
     logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
     config: { sessionId: 'sess', sessionDataPath: './data' },
   } as unknown as WwebjsLifecycleHost;
   const lc = new WwebjsLifecycle(host);
   lc.status = EngineStatus.QR_READY;
-  lc.client = { requestPairingCode, ...(cancelPairingCode ? { cancelPairingCode } : {}) } as unknown as Client;
+  lc.client = { requestPairingCode } as unknown as Client;
   return lc;
 }
 
@@ -36,39 +36,6 @@ describe('requestPairingCode retries a mid-navigation page', () => {
     lc.status = EngineStatus.INITIALIZING;
     await expect(lc.requestPairingCode('628111')).rejects.toBeInstanceOf(EngineNotReadyError);
     expect(requestPairingCode).not.toHaveBeenCalled();
-  });
-
-  it('cancels the abandoned attempt before starting the next one', async () => {
-    // The race abandons the losing attempt without cancelling it, and the library's flow arms an
-    // interval that keeps re-requesting a code. Two flows would then compete over one device slot.
-    jest.useFakeTimers();
-    const requestPairingCode = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('Execution context was destroyed, most likely because of a navigation.'))
-      .mockResolvedValueOnce('WXYZ1234');
-    const cancelPairingCode = jest.fn().mockResolvedValue(undefined);
-    const lc = makeLifecycle(requestPairingCode, cancelPairingCode);
-
-    const pending = lc.requestPairingCode('628111');
-    await jest.advanceTimersByTimeAsync(PAIRING_CODE_RETRY_DELAY_MS + 10);
-
-    await expect(pending).resolves.toBe('WXYZ1234');
-    expect(cancelPairingCode).toHaveBeenCalledTimes(1);
-  });
-
-  it('retries even when the library offers no cancel, and when the cancel itself fails', async () => {
-    jest.useFakeTimers();
-    const failingCancel = jest.fn().mockRejectedValue(new Error('page is gone'));
-    const requestPairingCode = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('Execution context was destroyed, most likely because of a navigation.'))
-      .mockResolvedValueOnce('WXYZ1234');
-    const lc = makeLifecycle(requestPairingCode, failingCancel);
-
-    const pending = lc.requestPairingCode('628111');
-    await jest.advanceTimersByTimeAsync(PAIRING_CODE_RETRY_DELAY_MS + 10);
-
-    await expect(pending).resolves.toBe('WXYZ1234');
   });
 
   it('retries a navigation-destroyed context and returns the code once the page reboots', async () => {

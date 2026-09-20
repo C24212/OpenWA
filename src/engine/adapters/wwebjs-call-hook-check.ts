@@ -33,11 +33,13 @@ function readCallHookState(): boolean | null {
 /**
  * Warn when a ready session's page carries no call hook.
  *
- * whatsapp-web.js installs the call hook part-way through the same `evaluate` as its message
- * listeners, and that evaluate has no `try`/`catch`: a module that stops resolving before it leaves
- * the message bridge registered and the call hook silently absent. The session then looks completely
- * healthy, keeps delivering messages, and never reports a single incoming call. Operators have no way to see
- * that from the outside, so say it in the log.
+ * whatsapp-web.js installs the call hook inside a conditional, part-way through the `evaluate` that
+ * registers its listeners: it patches the page's call collection only when the page exposes one
+ * shaped the way it expects. A WhatsApp Web build that moves or renames that collection skips the
+ * hook while the rest of the evaluate completes, so the session looks completely healthy, keeps
+ * delivering messages, and never reports a single incoming call. Operators have no way to see that
+ * from the outside, so say it in the log. (A stall inside the evaluate is not this case: the inbound
+ * message bridge is registered after the call hook, so it would stop message delivery too.)
  *
  * Deliberately advisory: it never changes the session's status. Detection is the only thing lost,
  * and a false alarm on an inconclusive read would send operators after a problem they do not have.
