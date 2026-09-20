@@ -243,6 +243,21 @@ describe('evaluateFilters', () => {
       expect(evaluateFilters(deny, 'message.received', msg({ chatId: '999@g.us' }))).toBe(true);
     });
 
+    // The ack and failure events carry no conversation at all: their payload is the shape the
+    // projector builds, `{ id, messageId, status, ack }`. A chatId condition therefore SUPPRESSES
+    // them rather than scoping them, which is a real surprise for anyone allowlisting a group, so
+    // it is pinned here and warned about in docs/06 rather than left to be discovered.
+    it('suppresses message.ack and message.failed, whose payload carries no conversation', () => {
+      const ackPayload = { id: 'M1', messageId: 'M1', status: 'delivered', ack: 3 };
+      const allow = filters({ field: 'chatId', operator: 'is', value: ['120@g.us'] });
+      expect(evaluateFilters(allow, 'message.ack', ackPayload)).toBe(false);
+      expect(evaluateFilters(allow, 'message.failed', { ...ackPayload, status: 'failed' })).toBe(false);
+
+      // And the exclusion direction delivers them, for the same reason: the field is not there.
+      const deny = filters({ field: 'chatId', operator: 'isNot', value: ['120@g.us'] });
+      expect(evaluateFilters(deny, 'message.ack', ackPayload)).toBe(true);
+    });
+
     it('scopes message.revoked / edited payloads that only carry chatId', () => {
       const f = filters({ field: 'chatId', operator: 'is', value: ['120@g.us'] });
       expect(evaluateFilters(f, 'message.revoked', { chatId: '120@g.us' })).toBe(true);
