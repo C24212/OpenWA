@@ -528,6 +528,39 @@ test('Escape dismisses the emoji picker instead of the conversation behind it', 
   await waitFor(() => assert.equal(screen.queryByRole('button', { name: 'Back' }), null, 'the room stayed open'));
 });
 
+test('the emoji picker yields Escape to a surface layered above it', async () => {
+  const { screen, fireEvent, within, waitFor } = rtl;
+  resetFetchCalls();
+  const { container } = renderChats();
+
+  await screen.findByText('Main (15551234567)');
+  fireEvent.click(await screen.findByText('Alice'));
+  await within(container.querySelector('.room-messages') as HTMLElement).findByText('hello from alice');
+
+  fireEvent.click(screen.getByTitle('Pick emoji'));
+  await waitFor(() => assert.ok(container.querySelector('.chats-emoji-picker'), 'the emoji picker did not open'));
+
+  // The media viewer and the language menu render their own role while open, and the picker can
+  // still be open underneath. Taking the key there would dismiss the thing the operator is not
+  // looking at. Stand one in rather than driving the viewer, which lives in a third-party portal.
+  const overlay = document.createElement('div');
+  overlay.setAttribute('role', 'dialog');
+  document.body.appendChild(overlay);
+  try {
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() =>
+      assert.ok(container.querySelector('.chats-emoji-picker'), 'the picker took a key it does not own'),
+    );
+    assert.ok(screen.queryByRole('button', { name: 'Back' }), 'the room closed under the overlay');
+  } finally {
+    overlay.remove();
+  }
+
+  // And once that surface is gone the picker answers again.
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => assert.equal(container.querySelector('.chats-emoji-picker'), null, 'the picker stayed open'));
+});
+
 test('Escape closes the open room, and is left alone while a dialog owns it', async () => {
   const { screen, fireEvent, within, waitFor } = rtl;
   resetFetchCalls();

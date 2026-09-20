@@ -61,14 +61,24 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
    * issued a fresh query for it, and the callers are on hot paths: a webhook filter resolves both the
    * event's actor and each of its own rule values, on every dispatch.
    *
-   * Cleared for a lid the moment this process learns a mapping for it ({@link index}), including one
-   * learned while the query that reported the absence was still in flight, and wholesale when the
-   * table is reloaded. What it does NOT notice is a row another process writes: that mapping stays
-   * unseen here until this process learns it or reloads, exactly as a phone already cached in
-   * {@link lidToPhone} does. Bounded by the same cap as the forward map, oldest-recorded first
-   * (the forward map is ordered by recency of USE, this one by when the absence was recorded).
+   * Cleared for a lid the moment this process learns a mapping for it ({@link index}), and wholesale
+   * when the table is reloaded. An absence is never RECORDED for a lid this process already holds or
+   * is still writing ({@link unsettledWrites}), which is what keeps a query that raced a write from
+   * shadowing the row it could not see yet.
+   *
+   * What it does NOT notice is a row ANOTHER process writes: that mapping stays unseen here until
+   * this process learns it or reloads, exactly as a phone already cached in {@link lidToPhone} does.
+   * Bounded by the same cap as the forward map, oldest-recorded first (the forward map is ordered by
+   * recency of USE, this one by when the absence was recorded).
    */
   private readonly absentFromTable = new Set<string>();
+  /**
+   * Lids whose row this process has indexed but not yet committed. `remember()` updates the in-memory
+   * maps synchronously and writes the table afterwards, so between the two a table read answers "no
+   * row" about a mapping that is about to exist. The forward map cannot stand in for this: the LRU
+   * can evict the entry inside that same window, leaving it indistinguishable from never-learned.
+   */
+  private readonly unsettledWrites = new Set<string>();
   // 0 = unbounded (legacy behaviour). Every other long-lived map in the engine surface is bounded, so
   // the default is finite; the env override exists for operators who explicitly want the old behaviour.
   private readonly maxCachedLids: number;
@@ -143,19 +153,22 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
       return; // unseen-or-changed only; a no-op write would just churn updatedAt
     }
     this.index(lid, phone);
+    this.unsettledWrites.add(lid);
     try {
       await this.repo.upsert({ lid, phone, sessionId: sessionId ?? null, updatedAt: new Date() }, ['lid']);
     } catch (err) {
       this.logger.warn(
         `Failed to persist lid->phone mapping for ${lid}: ${err instanceof Error ? err.message : String(err)}`,
       );
+    } finally {
+      this.unsettledWrites.delete(lid);
     }
   }
 
   /**
    * Repository fallback for a cache miss. Rows past the preload cap (or evicted by the LRU) are
    * still persisted, so a miss is warmed from the table: THIS lookup still returns undefined —
-   * the sync read contract can't await, and callers fall back to engine re-resolution — but the
+   * the sync read contract can't await, and callers fall back to engine re-resolution, but the
    * next one hits. A table miss IS remembered, so an unmapped lid stops re-querying on every
    * lookup ({@link absentFromTable}), but only when nothing learned that lid in the meantime;
    * a read error is swallowed (the table may not exist yet), the same posture as reload().
@@ -163,6 +176,11 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
   private warmFromTable(lid: string): void {
     if (!lid || this.pendingLookups.has(lid) || this.absentFromTable.has(lid)) return;
     this.pendingLookups.add(lid);
+    // Captured BEFORE the query: a write for this lid that has not reached the table yet means the
+    // answer is already stale, whatever it says. The forward-map check below cannot see that case,
+    // because `remember()` indexes synchronously and the LRU can evict the entry again before the
+    // query answers, at which point the map looks exactly like "never learned".
+    const writeInFlight = this.unsettledWrites.has(lid);
     void this.repo
       .findOne({ where: { lid } })
       .then(row => {
@@ -171,10 +189,10 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
           this.index(row.lid, row.phone);
           return;
         }
-        // Same last-write-wins rule as the positive branch: if a remember() landed while this query
-        // was in flight, the query answered about a table that no longer looks like that, and an
-        // absence recorded over a live mapping would block the warm-back once the LRU evicts it.
-        if (!row && !this.lidToPhone.has(lid)) this.noteAbsent(lid);
+        // Same rule for the negative: an absence recorded over a mapping this process already holds,
+        // or is still writing, would block the warm-back once the LRU evicts the forward entry, and
+        // the row would then be unreachable until something taught the same lid again.
+        if (!row && !this.lidToPhone.has(lid) && !writeInFlight) this.noteAbsent(lid);
       })
       .catch(() => undefined)
       .finally(() => this.pendingLookups.delete(lid));

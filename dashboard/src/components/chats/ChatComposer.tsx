@@ -97,10 +97,16 @@ function ChatComposer({
   // page's own Escape handler whatever order the two listeners were registered in, so the
   // preventDefault below is what the page reads, and the room stays open without the picker having
   // to advertise a role it does not implement.
+  //
+  // It still yields to a surface layered ABOVE it. The picker can stay open while the media viewer
+  // or a menu is opened over it, and taking the key there would dismiss the picker underneath
+  // instead of the thing the operator is looking at. Same test the page's own handler uses, so the
+  // three agree on who owns Escape.
   useEffect(() => {
     if (!showEmojiPicker) return;
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.isComposing) return;
+      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return;
       event.preventDefault();
       setShowEmojiPicker(false);
     };

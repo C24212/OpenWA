@@ -65,6 +65,7 @@ describe('safeAckHeaders (a plugin-authored ack cannot undo the app response con
       'Content-Length': '99',
       'Transfer-Encoding': 'chunked',
       'Content-Encoding': 'gzip',
+      Trailer: 'X-Checksum',
       'Content-Security-Policy': 'default-src *',
       'X-Content-Type-Options': 'nosniff-not',
       'X-Frame-Options': 'ALLOWALL',
@@ -79,12 +80,14 @@ describe('safeAckHeaders (a plugin-authored ack cannot undo the app response con
     expect(safeAckHeaders({ ...reserved, 'X-Provider-Ack': 'ok' })).toEqual({ 'X-Provider-Ack': 'ok' });
   });
 
-  it('drops the framing headers, which would put an undecodable response on the wire', () => {
-    // Express frames the ack itself and the host runs no compression middleware, so a declared
-    // `Transfer-Encoding: chunked` or `Content-Encoding: gzip` describes an encoding the body does
-    // not have: the provider's HTTP client fails to decode it and retries a delivery already queued.
+  it('drops the framing headers, which decide how the response is delimited and decoded', () => {
+    // The host frames the ack and never compresses it. A declared content encoding describes bytes
+    // the ack does not carry, so the provider's client fails to decode it and retries a delivery
+    // already queued; a declared Trailer makes Node refuse to write the response at all, which on a
+    // length-framed body throws past the request and takes the process with it.
     expect(safeAckHeaders({ 'transfer-encoding': 'chunked' })).toEqual({});
     expect(safeAckHeaders({ 'content-encoding': 'gzip' })).toEqual({});
+    expect(safeAckHeaders({ trailer: 'X-Checksum' })).toEqual({});
   });
 
   it('is total: no headers, and a non-string value, both answer an object', () => {

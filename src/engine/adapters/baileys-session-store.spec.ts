@@ -85,6 +85,43 @@ describe('BaileysSessionStore', () => {
     ]);
   });
 
+  it('answers for a saved lid-only contact whose lid has no mapping', () => {
+    // Projecting a contact resolves its lid through the store's OWN contacts map, and a read there
+    // moves the entry to the most-recent end. Listing over the live map therefore handed this entry
+    // back forever. A regression HANGS this file rather than failing it: the loop is synchronous, so
+    // no test timeout can interrupt it. A stuck run on this spec means the snapshot went away.
+    store.upsertContacts([{ id: '111@lid', name: 'Alice' }]);
+
+    expect(store.listContacts()).toEqual([
+      expect.objectContaining({ id: '111@lid', name: 'Alice', number: '', isMyContact: true }),
+    ]);
+  });
+
+  it('folds two twins by content, not by which one was touched last', () => {
+    // The store is LRU-ordered, so iteration order tracks traffic: an inbound message touches the
+    // lid twin on every message. Letting order decide meant the list answered with whichever twin
+    // had been quiet, dropping a pushname the other had just learned and flipping back later.
+    store.upsertContacts([{ id: '111@lid', name: 'Alice', notify: 'Ali', imgUrl: 'http://p/a.jpg' }]);
+    store.upsertContacts([{ id: '628111@s.whatsapp.net', lid: '111@lid', name: 'Alice' }]);
+
+    const first = store.listContacts();
+    expect(first).toEqual([
+      {
+        id: '628111@c.us',
+        name: 'Alice',
+        pushName: 'Ali', // filled from the lid twin, which is the only side that has one
+        number: '628111', // and the number from the phone twin, which is the only side with that
+        isMyContact: true,
+        isBlocked: false,
+        profilePicUrl: 'http://p/a.jpg',
+      },
+    ]);
+
+    // Touch the lid twin the way an inbound message does, moving it to the recent end, and read again.
+    expect(store.findContact('111@lid')).toBeTruthy();
+    expect(store.listContacts()).toEqual(first);
+  });
+
   it('accepts a contact keyed only by lid (id omitted) and finds it by phone', () => {
     store.upsertContacts([{ lid: '111@lid', phoneNumber: '628111@s.whatsapp.net', name: 'Ada' }]);
     expect(store.findContact('111@lid')?.name).toBe('Ada');

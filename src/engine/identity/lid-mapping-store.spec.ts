@@ -231,8 +231,9 @@ describe('LidMappingStoreService — deterministic preload + repository fallback
 
   it('stops re-querying the table for a lid it has no row for', async () => {
     // The callers are hot: a webhook filter resolves the event's actor AND each of its own rule
-    // values on every dispatch. pendingLookups collapses only the lookups that overlap a query still
-    // in flight, so an unmapped lid used to cost a query per dispatch, per webhook.
+    // values on every dispatch. pendingLookups collapses the lookups that overlap a query still in
+    // flight, which within one dispatch is all of them, so an unmapped lid used to cost one query
+    // per dispatch rather than one per webhook.
     const repo = makeFakeRepo(); // empty table: every lookup misses
     const store = new LidMappingStoreService(repo as unknown as Repository<LidMapping>);
 
@@ -288,6 +289,40 @@ describe('LidMappingStoreService — deterministic preload + repository fallback
     expect(store.getCached('lid-raced')).toBeUndefined(); // the read itself is still a miss
     await new Promise(resolve => setImmediate(resolve));
     expect(store.getCached('lid-raced')).toBe('620001'); // warmed back rather than blocked
+  });
+
+  it('records no absence for a lid whose own write has not reached the table yet', async () => {
+    // remember() indexes synchronously and writes afterwards, and its callers fire it without
+    // awaiting (one per mapping in a history batch). A lookup issued inside that window reads a
+    // table that does not carry the row yet, and the LRU can evict the forward entry in the same
+    // window, so "did this process learn it" answers no. An absence recorded there shadows a row
+    // that then commits.
+    process.env.LID_MAPPING_CACHE_MAX = '1';
+    const repo = makeFakeRepo();
+    let commit: () => void = () => undefined;
+    repo.upsert.mockImplementationOnce(
+      (values: Partial<LidMapping>) =>
+        new Promise(resolve => {
+          commit = () => {
+            repo.rows.push(values as LidMapping);
+            resolve({});
+          };
+        }),
+    );
+    const store = new LidMappingStoreService(repo as unknown as Repository<LidMapping>);
+
+    const writing = store.remember('lid-writing', '620001'); // indexed; its upsert is held open
+    await store.remember('lid-other', '620002'); // cap 1: evicts lid-writing from the forward map
+
+    expect(store.getCached('lid-writing')).toBeUndefined(); // issues the query, which finds no row
+    await new Promise(resolve => setImmediate(resolve));
+
+    commit(); // the write lands: the row is in the table from here on
+    await writing;
+
+    expect(store.getCached('lid-writing')).toBeUndefined(); // the read itself is still a miss
+    await new Promise(resolve => setImmediate(resolve));
+    expect(store.getCached('lid-writing')).toBe('620001'); // warmed back rather than blocked
   });
 
   it('records no absence at all when the cap is disabled', async () => {

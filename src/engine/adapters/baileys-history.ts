@@ -46,26 +46,31 @@ export interface BaileysHistoryHost {
  * Baileys timestamps are `number | Long`; normalize to unix seconds.
  *
  * A third shape reaches here that the proto type does not admit: a decimal STRING. The library
- * decodes `messageTimestamp` as a Long, and a Long serializes to its decimal string, so every
- * message read back out of `baileys_messages` (a JSON round trip) carries a string where the type
- * says number. Delete-for-me and edit both read that field off a stored message, so without this
- * arm they threw `ts.toNumber is not a function` on a shape the store always produces.
+ * decodes a message off the wire with `messageTimestamp` as a Long, and a Long serializes to its
+ * decimal string, so a message read back out of `baileys_messages` (a JSON round trip) carries a
+ * string where the type says number. Not EVERY stored message does: one persisted straight from a
+ * send return was built in process with a plain number and round-trips as one. Delete-for-me and
+ * edit both read this field off a stored message, so without the string arm they threw
+ * `ts.toNumber is not a function` for any message that had come off the wire.
  *
- * A string that is not a number falls back to now, like an absent value: a timestamp is never worth
- * failing an operation over, and NaN would poison every arithmetic consumer downstream.
+ * Never answers NaN or Infinity, from any arm: a timestamp is not worth failing an operation over,
+ * but a non-finite one poisons every arithmetic consumer downstream and would reach the wire. An
+ * unusable value falls back to now, like an absent one.
  */
 export function toUnixSeconds(ts: number | string | { toNumber(): number } | null | undefined): number {
+  const now = (): number => Math.floor(Date.now() / 1000);
   if (ts == null) {
-    return Math.floor(Date.now() / 1000);
+    return now();
   }
   if (typeof ts === 'number') {
-    return ts;
+    return Number.isFinite(ts) ? ts : now();
   }
   if (typeof ts === 'string') {
     const parsed = Number(ts);
-    return Number.isFinite(parsed) ? parsed : Math.floor(Date.now() / 1000);
+    return Number.isFinite(parsed) ? parsed : now();
   }
-  return ts.toNumber();
+  const converted = ts.toNumber();
+  return Number.isFinite(converted) ? converted : now();
 }
 
 export class BaileysHistory {

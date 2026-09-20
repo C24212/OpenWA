@@ -15,12 +15,12 @@
  * already installed, a session already running.
  */
 export const ENGINE_NOT_READY_409 =
-  'The session is not connected — an engine exists for it but is not `ready`: disconnected, ' +
+  'The session is not connected: an engine exists for it but is not `ready`, meaning disconnected, ' +
   'reconnecting, or still initializing, so the request never reached WhatsApp. Wait for `ready` and ' +
   'retry. A session that was never started answers `400` instead, and the session lifecycle routes ' +
   'answer `409` for a conflicting state rather than this. One window answers this while the session ' +
   'still reads `ready`: WhatsApp Web periodically reloads its own page and the engine re-injects ' +
-  'into it — for those few seconds the answer is a `409` naming the reload; retry shortly.';
+  'into it, and for those few seconds the answer is a `409` naming the reload; retry shortly.';
 
 /**
  * `EngineNotReadyError` (409) on `POST /sessions/:sessionId/pairing-code`, where the generic wording
@@ -85,9 +85,9 @@ export const ENGINE_REFUSED_403 =
   'WhatsApp refused the operation. The request was well formed — the refusal happened WhatsApp-side, ' +
   'most often because the account lacks the admin rights the operation requires.';
 
-/** `MessageNotFoundError` (404) — outside the adapter's lookup window, or revoked. */
+/** `MessageNotFoundError` (404): outside the adapter's lookup window, or revoked. */
 export const MESSAGE_NOT_FOUND_404 =
-  "No such message — the id is outside the engine's lookup window (roughly the last hundred messages " +
+  "No such message: the id is outside the engine's lookup window (roughly the last hundred messages " +
   'of the chat, or absent from the Baileys store) or the message was revoked.';
 
 /** `ChannelNotFoundError` (404), on routes addressed by channel id. */

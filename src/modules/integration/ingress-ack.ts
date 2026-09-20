@@ -36,11 +36,12 @@ export function renderAck(spec: IngressResponseContract['ack'] | undefined, ctx:
  * on the gateway's own origin, so none of them may undo what the app sets for every response:
  *
  *  - `content-type`, decided by {@link ackContentType} immediately after;
- *  - the framing and encoding headers, which describe a body Express has already framed and the host
- *    never compresses. A declared `Transfer-Encoding: chunked` or `Content-Encoding: gzip` describes
- *    bytes the ack does not carry, so the provider's HTTP client fails to decode the response and
- *    retries a delivery the host has already accepted and queued. `content-length` is inert (Express
- *    overwrites it) and is fenced with them rather than reasoned about separately;
+ *  - the framing and encoding headers, which decide how the response is delimited and decoded. The
+ *    host frames the ack itself and never compresses it, so a declared `Content-Encoding: gzip`
+ *    describes bytes the ack does not carry and the provider's client fails to decode it, while a
+ *    declared `Transfer-Encoding` makes Node re-frame a body it has already given a length, and a
+ *    declared `Trailer` makes it refuse to write the response at all. `content-length` is inert,
+ *    Express overwrites it, and is fenced with the rest rather than reasoned about separately;
  *  - the browser-facing protections that make a reflected ack body safe in the first place.
  *
  * Anything else a manifest declares still goes out verbatim.
@@ -50,6 +51,7 @@ const RESERVED_ACK_HEADERS: ReadonlySet<string> = new Set([
   'content-length',
   'transfer-encoding',
   'content-encoding',
+  'trailer',
   'content-security-policy',
   'x-content-type-options',
   'x-frame-options',

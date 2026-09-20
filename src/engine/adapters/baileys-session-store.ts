@@ -106,9 +106,52 @@ class LruMap<K, V> {
     return undefined;
   }
 
+  /**
+   * LIVE iterator, not a snapshot. {@link get} re-inserts a hit to keep recency order, so a loop
+   * whose body reads this map through any path is handed the same entry forever. Copy first
+   * (`[...map.values()]`) whenever the body can reach back into the map.
+   */
   values(): IterableIterator<V> {
     return this.map.values();
   }
+}
+
+/** A projected contact with the raw store key it came from, so twins can be folded deterministically. */
+interface ContactTwin {
+  contact: Contact;
+  rawId: string;
+}
+
+/** True for a store key in the phone dialect, i.e. the twin that carries a phone number of its own. */
+function isPhoneKeyed(rawId: string): boolean {
+  return rawId.endsWith('@s.whatsapp.net') || rawId.endsWith('@c.us');
+}
+
+/**
+ * Fold two store entries that project to the same person into one row.
+ *
+ * Neither side is more correct by position: the store is LRU-ordered, so iteration order tracks
+ * traffic, and letting it decide meant `GET /contacts` answered with whichever twin had been quiet
+ * and dropped a pushname the other had just learned, flipping back later. So a field absent on one
+ * side is filled from the other, and for a field both carry the phone-dialect twin wins, which is
+ * the entry {@link BaileysSessionStore.findContact} already answers with for the same id. When
+ * neither or both are phone-keyed, the lower raw key wins: arbitrary, but stable across calls.
+ */
+function mergeContactTwins(a: ContactTwin, b: ContactTwin): ContactTwin {
+  const aWins = isPhoneKeyed(a.rawId) !== isPhoneKeyed(b.rawId) ? isPhoneKeyed(a.rawId) : a.rawId <= b.rawId;
+  const [primary, secondary] = aWins ? [a, b] : [b, a];
+  return {
+    rawId: primary.rawId,
+    contact: {
+      id: primary.contact.id,
+      name: primary.contact.name ?? secondary.contact.name,
+      pushName: primary.contact.pushName ?? secondary.contact.pushName,
+      number: primary.contact.number || secondary.contact.number,
+      isMyContact: primary.contact.isMyContact || secondary.contact.isMyContact,
+      isBlocked: primary.contact.isBlocked || secondary.contact.isBlocked,
+      profilePicUrl: primary.contact.profilePicUrl ?? secondary.contact.profilePicUrl,
+    },
+  };
 }
 
 /**
@@ -371,18 +414,20 @@ export class BaileysSessionStore {
     //
     // Deduplicated by neutral id: one person can occupy two entries, one keyed by `@lid` and one by
     // the phone dialect, and when both carry a saved name they project to the SAME id once the lid
-    // resolves. Listing both put two rows sharing one id into the answer. The richer projection
-    // wins, so a twin that resolved to a number is not displaced by one that did not.
-    const byId = new Map<string, Contact>();
-    for (const c of this.contacts.values()) {
+    // resolves. Listing both put two rows sharing one id into the answer.
+    //
+    // The iteration is over a SNAPSHOT, and must stay that way: `toNeutralContact` resolves a lid
+    // through `resolvePhone`, which reads this very map, and a read moves the entry to the
+    // most-recent end. Iterating the live map therefore hands the same entry back forever, a
+    // synchronous loop that wedges the process rather than answering the request.
+    const byId = new Map<string, ContactTwin>();
+    for (const c of [...this.contacts.values()]) {
       if (!c.name) continue;
-      const contact = this.toNeutralContact(c);
-      const existing = byId.get(contact.id);
-      if (!existing || (!existing.number && contact.number)) {
-        byId.set(contact.id, contact);
-      }
+      const twin: ContactTwin = { contact: this.toNeutralContact(c), rawId: c.id };
+      const existing = byId.get(twin.contact.id);
+      byId.set(twin.contact.id, existing ? mergeContactTwins(existing, twin) : twin);
     }
-    return [...byId.values()];
+    return [...byId.values()].map(t => t.contact);
   }
 
   findContact(id: string): Contact | null {

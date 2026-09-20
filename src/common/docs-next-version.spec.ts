@@ -13,6 +13,10 @@ import { join } from 'path';
  * reference to the release being prepared, so there may be exactly one of them. The day the tag is
  * cut, bumping `package.json` is enough: the references become history and this spec falls silent.
  *
+ * It does NOT also assert that the changelog is still open. `## [Unreleased]` is kept in the file
+ * across every release, empty between them, so that assertion could never fail and only read as
+ * though something were being checked.
+ *
  * WHAT IT CANNOT SEE, stated rather than assumed. The docs name far more third-party versions than
  * ours, so the scan below is a heuristic with two deliberate holes:
  *
@@ -30,11 +34,12 @@ import { join } from 'path';
 const ROOT = join(__dirname, '..', '..');
 
 /**
- * A semantic version that reads as prose: at the start of a line or after whitespace, a backtick or
- * an opening paren, with an optional `v`. Deliberately NOT after `=`, `<`, `>`, `~`, `^`, `:`, `/`
- * or a quote, which is where a dependency constraint, an image tag or a JSON literal puts one.
+ * A semantic version that reads as prose: at the start of a line, or after whitespace, a backtick,
+ * an opening paren, or the markdown that wraps a word (`*`, `_`, `[`), with an optional `v`.
+ * Deliberately NOT after `=`, `<`, `>`, `~`, `^`, `:`, `/` or a quote, which is where a dependency
+ * constraint, an image tag or a JSON literal puts one.
  */
-const PROSE_SEMVER = /(?:^|[\s`(])v?(\d+)\.(\d+)\.(\d+)\b/gm;
+const PROSE_SEMVER = /(?:^|[\s`(*_[])v?(\d+)\.(\d+)\.(\d+)\b/gm;
 
 export type Semver = [number, number, number];
 
@@ -79,7 +84,11 @@ describe('forwardVersionsIn', () => {
   const current: Semver = [0, 23, 5];
 
   it('finds a forward reference however it is written, and counts it once', () => {
-    expect(forwardVersionsIn('upgrading from 0.23.6 to `0.23.6` (v0.23.6)', current)).toEqual(['0.23.6']);
+    // Including the markdown that wraps a word: emphasis and a link label are prose, and a version
+    // named there is exactly the kind a release bump leaves behind.
+    expect(
+      forwardVersionsIn('upgrading from 0.23.6 to `0.23.6` (v0.23.6) **0.23.6** _0.23.6_ [v0.23.6](x)', current),
+    ).toEqual(['0.23.6']);
   });
 
   it('ignores history, the current version, and anything of another major', () => {

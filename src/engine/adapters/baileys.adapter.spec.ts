@@ -3727,16 +3727,20 @@ describe('BaileysAdapter store-backed ops', () => {
     expect(fakeSock.sendMessage).not.toHaveBeenCalled();
   });
 
-  it('deleteMessage for-me sends a usable timestamp when the stored one is unreadable', async () => {
-    // A row written by an older build, or hand-edited: better a slightly wrong instant than NaN on
-    // the wire, which WhatsApp would reject and which no consumer downstream can do arithmetic on.
-    fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: 'not-a-number' });
-    const adapter = await ready();
-    await adapter.deleteMessage('628111@s.whatsapp.net', 'TARGET', false);
-    const [payload] = fakeSock.chatModify.mock.calls[0] as [{ deleteForMe: { timestamp: number } }];
-    expect(Number.isFinite(payload.deleteForMe.timestamp)).toBe(true);
-    expect(payload.deleteForMe.timestamp).toBeGreaterThan(1_600_000_000);
-  });
+  it.each([['not-a-number'], [Number.NaN], [Number.POSITIVE_INFINITY]])(
+    'deleteMessage for-me sends a usable timestamp when the stored one is %p',
+    async unusable => {
+      // A row written by an older build, or hand-edited. Anything non-finite would be built into
+      // the chatModify payload; Baileys encodes that timestamp into the app-state patch, so it is
+      // the request itself that is malformed, and nothing downstream can do arithmetic on it.
+      fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: unusable });
+      const adapter = await ready();
+      await adapter.deleteMessage('628111@s.whatsapp.net', 'TARGET', false);
+      const [payload] = fakeSock.chatModify.mock.calls[0] as [{ deleteForMe: { timestamp: number } }];
+      expect(Number.isFinite(payload.deleteForMe.timestamp)).toBe(true);
+      expect(payload.deleteForMe.timestamp).toBeGreaterThan(1_600_000_000);
+    },
+  );
 
   it('editMessage re-applies participant tags to the new body', async () => {
     // An edit REPLACES the content, so a body that still reads "@62811" needs the tag list resent or
