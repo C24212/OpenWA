@@ -183,6 +183,30 @@ describe('hydrateNames', () => {
     expect(resyncAppState.mock.calls.filter(([, initial]) => initial === true)).toHaveLength(1);
   });
 
+  it('retries the snapshot on the next reconnect when the pull itself failed', async () => {
+    // The once-per-instance flag is set BEFORE the await so two connects cannot pull concurrently,
+    // which means a failed pull would otherwise spend the one attempt this instance gets and leave
+    // the address book empty until a process restart.
+    const set = jest.fn().mockRejectedValueOnce(new Error('socket closed')).mockResolvedValue(undefined);
+    const resyncAppState = jest.fn().mockResolvedValue(undefined);
+    const { history: h } = history(
+      {
+        groupFetchAllParticipating: jest.fn().mockResolvedValue({}),
+        resyncAppState,
+        authState: { creds: { accountSyncCounter: 1 }, keys: { set } },
+      },
+      { contactCount: 0 },
+    );
+
+    await h.hydrateNames(); // the pull throws and is swallowed by the outer catch
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(resyncAppState.mock.calls.filter(([, initial]) => initial === true)).toHaveLength(0);
+
+    await h.hydrateNames();
+    expect(set).toHaveBeenCalledTimes(2);
+    expect(resyncAppState).toHaveBeenCalledWith(['critical_unblock_low'], true);
+  });
+
   it('uses the incremental resync on a first link (accountSyncCounter is still 0)', async () => {
     // First connect still has Baileys' own snapshot path in flight; forcing another snapshot would
     // race it. Empty contacts here are the boot window, not a missed reconnect.

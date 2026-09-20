@@ -248,10 +248,13 @@ describe('evaluateFilters', () => {
     // them rather than scoping them, which is a real surprise for anyone allowlisting a group, so
     // it is pinned here and warned about in docs/06 rather than left to be discovered.
     it('suppresses message.ack and message.failed, whose payload carries no conversation', () => {
-      const ackPayload = { id: 'M1', messageId: 'M1', status: 'delivered', ack: 3 };
+      // Real pairings: deliveryStatusToAck maps delivered to 2 and failed to -1, and message.failed
+      // is a copy of the same object, so the fixture must not invent a status/ack pair of its own.
+      const ackPayload = { id: 'M1', messageId: 'M1', status: 'delivered', ack: 2 };
+      const failedPayload = { id: 'M1', messageId: 'M1', status: 'failed', ack: -1 };
       const allow = filters({ field: 'chatId', operator: 'is', value: ['120@g.us'] });
       expect(evaluateFilters(allow, 'message.ack', ackPayload)).toBe(false);
-      expect(evaluateFilters(allow, 'message.failed', { ...ackPayload, status: 'failed' })).toBe(false);
+      expect(evaluateFilters(allow, 'message.failed', failedPayload)).toBe(false);
 
       // And the exclusion direction delivers them, for the same reason: the field is not there.
       const deny = filters({ field: 'chatId', operator: 'isNot', value: ['120@g.us'] });

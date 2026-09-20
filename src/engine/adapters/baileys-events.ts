@@ -201,10 +201,12 @@ export class BaileysEvents {
       void this.host.inboundLimiter
         .run(() => this.processInboundMessage(msg))
         .catch((error: unknown) => {
-          // Two different failures land here and they are not the same event. The limiter closing is
-          // an orderly teardown; anything else is a real download failure, and reporting it as
-          // "saturated" sent operators to look at concurrency settings for a problem that was never
-          // there. Say which one happened.
+          // Only one failure can actually land here today: the limiter closing, an orderly teardown.
+          // Its queue is unbounded so it never sheds, and processInboundMessage swallows its own
+          // errors, so nothing else rejects. The other arm is defence in depth against a rejection
+          // shape that does not exist yet, and it names the error rather than calling it
+          // "saturated", which used to send operators to look at concurrency settings for a problem
+          // that was never there. The retry below cannot reject either, for the same reason.
           const closed = error instanceof Error && error.message.startsWith('ConcurrencyLimiter closed');
           this.host.logger.warn(
             closed

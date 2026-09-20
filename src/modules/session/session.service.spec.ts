@@ -6070,9 +6070,12 @@ describe('SessionService', () => {
     });
   });
 
-  // ── stop ──────────────────────────────────────────────────────────
+  // ── stop / logout / forceKill ─────────────────────────────────────
 
-  describe('stop', () => {
+  // Named for all three: the disconnect-announcement cases below cover logout and forceKill as
+  // well, since the three share one teardown guard, and reporting them under 'stop' alone hid
+  // which verb a failure belonged to.
+  describe('stop (and the teardown its siblings share)', () => {
     it('should disconnect engine and set status to DISCONNECTED', async () => {
       const session = createMockSession();
       (repository.findOne as jest.Mock).mockResolvedValue(session);

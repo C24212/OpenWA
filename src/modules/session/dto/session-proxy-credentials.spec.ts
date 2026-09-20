@@ -29,13 +29,13 @@ describe('proxy credential escapes on both routes that accept a proxy URL', () =
 
   it('refuses it on the proxy update route, naming the escape', async () => {
     expect(await messagesFrom(UpdateSessionProxyDto, { proxyUrl: BAD })).toEqual([
-      expect.stringContaining('percent-escape'),
+      expect.stringContaining('invalid percent-escape'),
     ]);
   });
 
   it('refuses it on the session create route', async () => {
     expect(await messagesFrom(CreateSessionDto, { name: 'sess', proxyUrl: BAD })).toEqual([
-      expect.stringContaining('percent-escape'),
+      expect.stringContaining('invalid percent-escape'),
     ]);
   });
 
