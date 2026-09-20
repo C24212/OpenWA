@@ -340,6 +340,11 @@ export function Sessions() {
       // retires the start, and an engine can fail right after answering. Skip the modal when the re-read
       // shows the session without one. A failed re-read gives no answer, so the start's success decides.
       const row = (await fetchSessions()).find(s => s.id === id);
+      // A session that came back already linked has nothing to scan. Decided from the re-read rather
+      // than left to handleShowQR's own guard, which reads the sessions state this render still
+      // holds: that state predates both the start response and the re-read, so it would let the
+      // modal open over a connected session and then poll for a QR that can never arrive.
+      if (row?.status === 'ready') return;
       if (!row || isSessionStarted(row)) handleShowQR(id);
     } catch (err) {
       console.error('Failed to start:', err);

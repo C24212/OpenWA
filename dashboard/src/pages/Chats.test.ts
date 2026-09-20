@@ -504,6 +504,34 @@ test('a typed draft survives closing and reopening the room', async () => {
   assert.equal(input.value, 'draft survives');
 });
 
+test('Escape dismisses the emoji picker instead of the conversation behind it', async () => {
+  const { screen, fireEvent, within, waitFor } = rtl;
+  resetFetchCalls();
+  const { container } = renderChats();
+
+  await screen.findByText('Main (15551234567)');
+  fireEvent.click(await screen.findByText('Alice'));
+  await within(container.querySelector('.room-messages') as HTMLElement).findByText('hello from alice');
+
+  fireEvent.click(screen.getByTitle('Pick emoji'));
+  const picker = await waitFor(() => {
+    const found = container.querySelector('.chats-emoji-picker');
+    assert.ok(found, 'the emoji picker did not open');
+    return found as HTMLElement;
+  });
+
+  // The page-level handler listens on document and skips anything with role="menu", so an Escape it
+  // sees while the picker is open must leave the conversation alone.
+  fireEvent.keyDown(document, { key: 'Escape' });
+  assert.ok(screen.queryByRole('button', { name: 'Back' }), 'Escape closed the room while the picker owned it');
+  assert.ok(container.querySelector('.chats-emoji-picker'), 'the picker closed on a document-level Escape');
+
+  // And the picker owes that skip the behaviour it assumes: Escape on the picker dismisses it.
+  fireEvent.keyDown(picker, { key: 'Escape' });
+  await waitFor(() => assert.equal(container.querySelector('.chats-emoji-picker'), null, 'the picker stayed open'));
+  assert.ok(screen.queryByRole('button', { name: 'Back' }), 'dismissing the picker also closed the room');
+});
+
 test('Escape closes the open room, and is left alone while a dialog owns it', async () => {
   const { screen, fireEvent, within, waitFor } = rtl;
   resetFetchCalls();

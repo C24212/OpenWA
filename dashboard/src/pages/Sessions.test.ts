@@ -546,6 +546,32 @@ test('a start that answers with its engine up opens the QR modal', async () => {
   }
 });
 
+// A start of a session that was already linked elsewhere comes back `ready`. The modal's own guard
+// reads the sessions state of the render that began the start, which predates both the answer and the
+// re-read, so the decision has to be taken from the re-read itself.
+test('a start whose re-read shows the session ready opens no QR modal', async () => {
+  const { screen, fireEvent, within, waitFor } = rtl;
+  resetFetchCalls();
+  startResult = {
+    answer: { status: 'initializing', engineLoaded: true },
+    leaves: { status: 'ready', engineLoaded: true },
+  };
+  SESSIONS.push({ ...SESSION_QR, id: 'sess-ready-1', name: 'already-linked', status: 'created', engineLoaded: false });
+  try {
+    renderSessions();
+
+    const card = (await screen.findByText('already-linked')).closest('.session-card') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Start' }));
+    await waitFor(() => assert.ok(findFetchCall('POST', '/api/sessions/sess-ready-1/start')));
+    // The re-read lands as this card turning Connected, which is also when the handler has decided
+    // about the modal; the Start button is gone by then, so it cannot be the settle signal here.
+    await waitFor(() => assert.ok(within(card).queryByText('Connected')));
+    assert.ok(!screen.queryByRole('dialog'), 'a QR modal opened over a session that came back ready');
+  } finally {
+    SESSIONS.pop();
+  }
+});
+
 // A start can answer 200 with an engine that is gone by the time the list is read back: a stop that landed
 // while it ran retires it, and an engine can fail right after answering. The re-read decides, not the
 // answer, since a QR modal over that session could only spin.

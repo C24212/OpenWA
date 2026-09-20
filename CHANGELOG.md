@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An ingress route whose manifest carries a non-string ack body, status or header is answered rather than failing with `500`; a manifest is third-party JSON and the loader does not type-check every leaf.
 - Uploading a zip whose trailer parses but whose directory does not answers `400`, not `500`.
 - A `socks5://` or `socks4://` proxy at an IPv6 literal connects: the brackets `URL` keeps were going on the wire as part of a hostname.
+- Starting a session that turns out to be linked already no longer opens a QR modal over it, which then polled for a code that could never arrive. The decision now reads the list the dashboard re-reads after the start, not the state it held before it.
+- Escape dismisses the Chats emoji picker instead of closing the whole conversation behind it.
 - A click on a WhatsApp Business prompt quotes the prompt in the stored reply, so the dashboard renders the question above the answer instead of an empty quote box.
 - A template prompt that numbers only some of its buttons no longer answers the bot with an index belonging to a different button: a template that carries its own numbering is answered with it, and one that carries none is answered by position.
 - A proxy password no longer reaches the log. A failed SOCKS connect carries the whole proxy config as the error's only property, and `BAILEYS_LOG_LEVEL=debug` wrote it to stdout verbatim.

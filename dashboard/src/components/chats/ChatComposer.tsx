@@ -277,7 +277,17 @@ function ChatComposer({
 
       {/* Popular emojis panel */}
       {showEmojiPicker && (
-        <div className="chats-emoji-picker">
+        // role="menu" is what the page's Escape handler skips, and it owes that handler the
+        // behaviour the skip assumes: Escape dismisses the picker rather than the conversation.
+        <div
+          className="chats-emoji-picker"
+          role="menu"
+          onKeyDown={event => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            setShowEmojiPicker(false);
+          }}
+        >
           <div className="emoji-grid">
             {popularEmojis.map(emoji => (
               <button key={emoji} type="button" className="emoji-btn" onClick={() => handleEmojiClick(emoji)}>
