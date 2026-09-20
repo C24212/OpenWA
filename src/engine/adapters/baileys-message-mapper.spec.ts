@@ -541,6 +541,47 @@ describe('extractBaileysButtons (prompt choices Sim/Não / list rows)', () => {
     ]);
   });
 
+  it('drops a native-flow CTA carried inside a classic buttonsMessage', () => {
+    // The same envelope can hold both a reply button and a CTA that opens a URL or dials a number.
+    // A CTA cannot be answered, so publishing it would offer a choice the click route must refuse.
+    expect(
+      extractBaileysButtons(
+        {
+          buttonsMessage: {
+            buttons: [
+              { buttonId: 'yes', buttonText: { displayText: 'Sim' } },
+              {
+                buttonId: 'docs',
+                buttonText: { displayText: 'Open the docs' },
+                nativeFlowInfo: { name: 'cta_url', paramsJson: JSON.stringify({ url: 'https://example.test' }) },
+              },
+            ],
+          },
+        },
+        'buttonsMessage',
+      ),
+    ).toEqual([{ id: 'yes', text: 'Sim' }]);
+  });
+
+  it('keeps a native-flow quick reply carried inside a classic buttonsMessage', () => {
+    expect(
+      extractBaileysButtons(
+        {
+          buttonsMessage: {
+            buttons: [
+              {
+                buttonId: 'yes',
+                buttonText: { displayText: 'Sim' },
+                nativeFlowInfo: { name: 'quick_reply' },
+              },
+            ],
+          },
+        },
+        'buttonsMessage',
+      ),
+    ).toEqual([{ id: 'yes', text: 'Sim' }]);
+  });
+
   it('extracts interactiveMessage native-flow quick replies', () => {
     expect(
       extractBaileysButtons(

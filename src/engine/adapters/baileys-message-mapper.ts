@@ -343,6 +343,8 @@ export interface BaileysButtonsPromptContent {
     buttons?: Array<{
       buttonId?: string | null;
       buttonText?: { displayText?: string | null } | null;
+      /** Present on a NATIVE_FLOW button, whose `name` decides whether it can be answered at all. */
+      nativeFlowInfo?: { name?: string | null; paramsJson?: string | null } | null;
     } | null> | null;
   } | null;
   interactiveMessage?: {
@@ -492,6 +494,14 @@ export function extractBaileysClickableButtons(
       (content.buttonsMessage?.buttons ?? []).map((button, position) => {
         const text = button?.buttonText?.displayText?.trim();
         if (!text) return undefined;
+        // A button in this envelope can still be a native-flow CTA (open a URL, dial a number), and
+        // those cannot be answered with a reply. Keyed off the presence of nativeFlowInfo rather
+        // than the type enum, which reaches us as a number or as its string name depending on how
+        // the message was decoded, and which a CTA may omit entirely.
+        const flow = button?.nativeFlowInfo;
+        if (flow && !CLICKABLE_NATIVE_FLOW_NAMES.has(flow.name ?? '')) {
+          return undefined;
+        }
         const id = button?.buttonId?.trim() || text;
         return { id, text, index: position };
       }),
