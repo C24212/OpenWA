@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An ingress route whose manifest carries a non-string ack body, status or header is answered rather than failing with `500`; a manifest is third-party JSON and the loader does not type-check every leaf.
 - Uploading a zip whose trailer parses but whose directory does not answers `400`, not `500`.
 - A `socks5://` or `socks4://` proxy at an IPv6 literal connects: the brackets `URL` keeps were going on the wire as part of a hostname.
+- A whatsapp-web.js pairing-code retry cancels the attempt it abandoned before starting the next one. The per-attempt timeout stops waiting but does not stop the library's in-page linking flow, which keeps re-requesting a code on its own interval, so retries used to stack competing flows over one device slot.
 - A Baileys session whose credentials carry no LID of their own no longer reports a `group.join` for a group it created itself: every LID comparison answered false, so the creator was never recognised. The session's own LID mapping settles it instead.
 - Starting a session that turns out to be linked already no longer opens a QR modal over it, which then polled for a code that could never arrive. The decision now reads the list the dashboard re-reads after the start, not the state it held before it.
 - Escape dismisses the Chats emoji picker instead of closing the whole conversation behind it.

@@ -1072,6 +1072,13 @@ export class WwebjsLifecycle {
           throw error;
         }
         if (attempt < PAIRING_CODE_MAX_ATTEMPTS) {
+          // The race abandons the losing attempt, it does not cancel it: the library's in-page
+          // linking flow keeps running, and it arms an interval that re-requests a code every few
+          // minutes. Starting the next attempt on top of that leaves two flows competing over one
+          // device slot. Ask the library to stop the abandoned one first, best-effort: it is itself a
+          // page evaluate, and the page is exactly what is unwell here, so its own failure must not
+          // replace the transient reason this retry exists for.
+          await this.cancelAbandonedPairing();
           await new Promise<void>(resolve => {
             const t = setTimeout(resolve, PAIRING_CODE_RETRY_DELAY_MS);
             t.unref?.();
@@ -1095,5 +1102,25 @@ export class WwebjsLifecycle {
       `Pairing code could not be generated after ${PAIRING_CODE_MAX_ATTEMPTS} attempts: ` +
         `${lastError instanceof Error ? lastError.message : String(lastError)}`,
     );
+  }
+
+  /**
+   * Stop a pairing flow whose attempt was abandoned, so the next attempt does not run beside it.
+   *
+   * The library's own cancel clears the in-page re-request interval and returns the page to QR mode.
+   * Best-effort in every direction: the method is absent on older builds, and it is a page evaluate
+   * against the page that just failed, so neither its absence nor its failure may surface here.
+   */
+  private async cancelAbandonedPairing(): Promise<void> {
+    const cancel = (this.client as unknown as { cancelPairingCode?: () => Promise<void> } | null)?.cancelPairingCode;
+    if (typeof cancel !== 'function') return;
+    try {
+      await cancel.call(this.client);
+    } catch (error) {
+      this.host.logger.debug('Could not cancel the abandoned pairing attempt', {
+        sessionId: this.host.config.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
