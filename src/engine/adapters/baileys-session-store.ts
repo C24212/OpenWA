@@ -368,7 +368,21 @@ export class BaileysSessionStore {
   listContacts(): Contact[] {
     // GET /contacts is the address book, not "everyone this session has ever seen". Baileys
     // documents `name` as the one YOU saved; `notify` is only the pushname they set themselves.
-    return [...this.contacts.values()].filter(c => c.name).map(c => this.toNeutralContact(c));
+    //
+    // Deduplicated by neutral id: one person can occupy two entries, one keyed by `@lid` and one by
+    // the phone dialect, and when both carry a saved name they project to the SAME id once the lid
+    // resolves. Listing both put two rows sharing one id into the answer. The richer projection
+    // wins, so a twin that resolved to a number is not displaced by one that did not.
+    const byId = new Map<string, Contact>();
+    for (const c of this.contacts.values()) {
+      if (!c.name) continue;
+      const contact = this.toNeutralContact(c);
+      const existing = byId.get(contact.id);
+      if (!existing || (!existing.number && contact.number)) {
+        byId.set(contact.id, contact);
+      }
+    }
+    return [...byId.values()];
   }
 
   findContact(id: string): Contact | null {
@@ -491,9 +505,14 @@ export class BaileysSessionStore {
   }
 
   private toNeutralContact(c: BaileysContact): Contact {
-    const number = c.phoneNumber ? userPart(c.phoneNumber) : c.id.endsWith('@s.whatsapp.net') ? userPart(c.id) : '';
+    // The number is read off the NEUTRAL id, which has already done the lid resolution: a lid-keyed
+    // entry whose mapping is known projects to `<phone>@c.us` and carries its number, where reading
+    // the raw `@lid` key answered an empty string for somebody the account has saved. An unresolved
+    // lid still answers '', which is the honest answer there.
+    const id = this.toNeutralJid(c.id);
+    const number = c.phoneNumber ? userPart(c.phoneNumber) : id.endsWith('@c.us') ? userPart(id) : '';
     return {
-      id: this.toNeutralJid(c.id),
+      id,
       name: c.name ?? c.verifiedName,
       pushName: c.notify,
       number,

@@ -64,6 +64,27 @@ describe('BaileysSessionStore', () => {
     expect(store.findContact('628111@c.us')).toMatchObject({ name: 'Alice', isMyContact: true });
   });
 
+  it('answers a lid lookup with the phone number when both twins carry a saved name', () => {
+    // The preference above is keyed on `name` alone, so when BOTH entries are named the queried
+    // dialect wins. For a lid query that is the lid-keyed entry, whose `number` is empty unless it
+    // is derived from the resolved id: a saved contact answered with no phone number at all.
+    store.upsertContacts([{ id: '111@lid', name: 'Alice' }]);
+    store.upsertContacts([{ id: '628111@s.whatsapp.net', lid: '111@lid', name: 'Alice' }]);
+
+    expect(store.findContact('111@lid')).toMatchObject({ id: '628111@c.us', name: 'Alice', number: '628111' });
+  });
+
+  it('lists a person once when both of their entries carry a saved name', () => {
+    // Both project to the same neutral id once the lid resolves, so listing both puts two rows
+    // sharing one id into GET /contacts.
+    store.upsertContacts([{ id: '111@lid', name: 'Alice' }]);
+    store.upsertContacts([{ id: '628111@s.whatsapp.net', lid: '111@lid', name: 'Alice' }]);
+
+    expect(store.listContacts()).toEqual([
+      expect.objectContaining({ id: '628111@c.us', name: 'Alice', number: '628111' }),
+    ]);
+  });
+
   it('accepts a contact keyed only by lid (id omitted) and finds it by phone', () => {
     store.upsertContacts([{ lid: '111@lid', phoneNumber: '628111@s.whatsapp.net', name: 'Ada' }]);
     expect(store.findContact('111@lid')?.name).toBe('Ada');
