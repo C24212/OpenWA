@@ -3486,6 +3486,8 @@ describe('BaileysAdapter store-backed ops', () => {
   const ownStored = {
     key: { id: 'TARGET', remoteJid: '628111@s.whatsapp.net', fromMe: true },
     message: { conversation: 'hi' },
+    // Distinct from the edit envelope's send time below, so a spec cannot pass on either one.
+    messageTimestamp: 1700000000,
   };
 
   it('replyToMessage quotes the stored message', async () => {
@@ -3709,9 +3711,9 @@ describe('BaileysAdapter store-backed ops', () => {
 
   it('editMessage edits via the stored key and returns the (unchanged) message id', async () => {
     fakeStore.getMessage.mockResolvedValue(ownStored);
-    // The library answers with the protocol envelope that carried the edit, which has an id of its
-    // own; the edited message keeps the id the caller passed. A mock echoing the target id back
-    // would pass whichever of the two the adapter returned.
+    // The library answers with the protocol envelope that carried the edit, which has an id AND a
+    // send time of its own; the edited message keeps both of the caller's. A mock echoing the
+    // target's values back would pass whichever of the two the adapter returned.
     fakeSock.sendMessage.mockResolvedValue({
       key: { ...ownStored.key, id: '3EB0FRESHENVELOPE' },
       messageTimestamp: 1700000010,
@@ -3727,15 +3729,15 @@ describe('BaileysAdapter store-backed ops', () => {
       },
       expect.objectContaining({ getUrlInfo: expect.any(Function) as unknown }) as unknown,
     );
-    expect(res).toEqual({ id: 'TARGET', timestamp: 1700000010 });
+    expect(res).toEqual({ id: 'TARGET', timestamp: 1700000000 });
   });
 
-  it('editMessage falls back to the requested id when the send echoes nothing back', async () => {
+  it('editMessage answers from the stored message even when the send echoes nothing back', async () => {
     fakeStore.getMessage.mockResolvedValue(ownStored);
     fakeSock.sendMessage.mockResolvedValue(undefined);
     const adapter = await ready();
     const res = await adapter.editMessage('628111@s.whatsapp.net', 'TARGET', 'edited body');
-    expect(res.id).toBe('TARGET');
+    expect(res).toEqual({ id: 'TARGET', timestamp: 1700000000 });
   });
 
   it('editMessage throws MessageNotFoundError when the message is not in the store', async () => {

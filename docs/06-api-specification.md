@@ -2204,9 +2204,7 @@ Edit the text of a message sent by this account; also updates the stored record'
 
 **Response** `200`
 
-The edited message keeps its original id, on both engines, so the id you passed is the id you get back.
-
-`timestamp` is the one field the two engines report differently: Baileys answers with the time the edit was sent, whatsapp-web.js re-reads the message and answers with the time the ORIGINAL message was sent. Read the stored message if you need one of the two specifically.
+Both fields describe the edited message rather than the edit itself, on both engines: `messageId` is the id you passed, and `timestamp` is the time that message was originally sent, since an edit does not move a message in the chat.
 
 ```json
 { "messageId": "true_628123456789@c.us_3EB0ABCD", "timestamp": 1760000000 }

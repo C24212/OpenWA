@@ -576,12 +576,13 @@ export class BaileysMessaging {
     // protocolMessage edit envelope, so an edit can re-tag participants. An edit REPLACES the
     // content, so omitting mentions drops whatever tags the original carried.
     const editContent = { text: body, ...this.withMentions(mentions), edit: target.key };
-    const sent = await this.send(jid, this.previewSafe(editContent), this.previewSafeOptions(editContent));
-    // The edited message keeps its own id, which is what the caller asked to edit and what the stored
-    // row is keyed by. The library answers with the protocol envelope that carried the edit, and that
-    // envelope has a fresh id of its own; returning it would name a message no API can address, and
-    // would disagree with the whatsapp-web.js engine, which returns the original.
-    return { id: messageId, timestamp: this.host.toUnixSeconds(sent?.messageTimestamp) };
+    await this.send(jid, this.previewSafe(editContent), this.previewSafeOptions(editContent));
+    // Both fields describe the EDITED MESSAGE, not the protocol envelope that carried the edit.
+    // That envelope has an id and a send time of its own; answering with either would name something
+    // no route can address and no stored row is keyed by, and would disagree with the
+    // whatsapp-web.js engine, which re-reads the message and reports the original of both. An edit
+    // does not move a message in the chat, so its timestamp is still the one it was sent at.
+    return { id: messageId, timestamp: this.host.toUnixSeconds(target.messageTimestamp) };
   }
 
   /**
