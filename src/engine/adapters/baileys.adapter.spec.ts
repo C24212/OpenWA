@@ -2419,6 +2419,39 @@ describe('BaileysAdapter inbound fan-out', () => {
     expect(onMessageCreate).toHaveBeenCalledTimes(1);
   });
 
+  // A story is not a conversation: the projector drops an own status post rather than reporting it,
+  // so downloading its media first is work nothing consumes, and a story is a full-size photo.
+  it('does not download the media of a status the account posted from its phone', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const baileys = jest.requireMock('@whiskeysockets/baileys') as {
+      getContentType: jest.Mock;
+      downloadMediaMessage: jest.Mock;
+    };
+    baileys.getContentType.mockReturnValue('imageMessage');
+    baileys.downloadMediaMessage.mockClear();
+
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+
+    fakeSock.fire('messages.upsert', {
+      type: 'append',
+      messages: [
+        {
+          key: { remoteJid: 'status@broadcast', fromMe: true, id: 'OWN_STATUS_1' },
+          message: { imageMessage: { mimetype: 'image/jpeg', caption: 'from the phone' } },
+          messageTimestamp: Math.floor(Date.now() / 1000) - 60,
+        },
+      ],
+    });
+    await new Promise(r => setImmediate(r));
+
+    expect(baileys.downloadMediaMessage).not.toHaveBeenCalled();
+    // Still reported, so nothing downstream changes: only the download is skipped.
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+  });
+
   // A store that cannot answer must not be read as "this was never sent": the only other outcome is
   // the handler's catch, which drops the message, and Baileys acks the node before emitting it, so
   // WhatsApp never sends it again. Fail open, and take the duplicate risk instead of the loss.

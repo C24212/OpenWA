@@ -374,7 +374,14 @@ export class BaileysEvents {
         });
         return;
       }
-      const incoming = await this.mapMessage(msg, contentType, { skipMediaDownload: opts?.skipMedia });
+      // The account's own status post reaches the projector and is dropped there: a story is not a
+      // conversation, so no `message.sent` is emitted for it. Downloading its media first is work
+      // nothing consumes, and a story is a full-size photo or video. Everything else about the path
+      // is kept, so the message is still recorded and still guards against a repeat delivery.
+      const ownStatusPost = msg.key.fromMe === true && remoteJid === 'status@broadcast';
+      const incoming = await this.mapMessage(msg, contentType, {
+        skipMediaDownload: opts?.skipMedia || ownStatusPost,
+      });
       if (msg.key.fromMe === true) {
         this.host.getOnMessageCreate()?.(incoming);
       } else {
