@@ -414,7 +414,7 @@ function ChatThread({
                     msg.type !== 'call' && <MessageBody text={msg.body} className="message-text" />
                   )}
 
-                  {/* Inbound business prompt choices — tap calls POST .../messages/click-button. */}
+                  {/* Inbound business prompt choices; a tap calls POST .../messages/click-button. */}
                   {!isMe && !isRevoked && !isMasked && (msg.metadata?.buttons?.length ?? 0) > 0 && (
                     <div className="message-prompt-buttons" role="group" aria-label={t('chats.promptButtons')}>
                       {msg.metadata!.buttons!.map((btn, idx) => {

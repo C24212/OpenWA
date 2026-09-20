@@ -268,7 +268,7 @@ export interface BaileysButtonReplyContent {
  * Extract the stable id (and visible label) when the sender tapped a business button, template
  * quick-reply, list row, or native-flow control. Returns `undefined` when the content is not a
  * reply shape, or when WhatsApp omitted the id a caller would act on. Pass the NORMALIZED content,
- * as the adapter does — a reply in a disappearing chat nests under `ephemeralMessage`.
+ * as the adapter does: a reply in a disappearing chat nests under `ephemeralMessage`.
  */
 export function extractBaileysButtonReply(
   content: BaileysButtonReplyContent,
@@ -309,7 +309,7 @@ export function extractBaileysButtonReply(
 
   if (contentType === 'interactiveResponseMessage') {
     const flow = content.interactiveResponseMessage?.nativeFlowResponseMessage;
-    // Replies must carry a stable id — a display-text-only params payload is not actionable.
+    // Replies must carry a stable id: a display-text-only params payload is not actionable.
     const fromParams = parseNativeFlowButtonParams(flow?.paramsJson, { requireId: true });
     if (fromParams) {
       return fromParams;
@@ -391,7 +391,7 @@ const CLICKABLE_NATIVE_FLOW_NAMES = new Set(['quick_reply', 'button_click']);
 
 /**
  * One clickable choice, carrying the proto index a template reply must echo. Not published on
- * {@link IncomingMessage.buttons} — callers send `id` (and optional `text`) and the click path
+ * {@link IncomingMessage.buttons}: callers send `id` (and optional `text`) and the click path
  * looks the index up.
  */
 export interface BaileysClickableChoice {
@@ -445,7 +445,7 @@ export interface BaileysButtonClickPayload {
 /**
  * Resolve a click against a stored business prompt: validate the content type and button id, fill
  * in the display text when the caller omitted it, and build the `sendMessage` content WhatsApp
- * expects for that prompt shape. CTA url/call entries are not clickable — only quick-reply style
+ * expects for that prompt shape. CTA url/call entries are not clickable, only quick-reply style
  * choices and list rows. When several choices share an id, a caller-supplied `text` disambiguates
  * (a list reusing `rowId` across sections).
  */
@@ -493,7 +493,7 @@ export function resolveBaileysButtonClick(
 
 /**
  * Choices that can be answered with a structured reply. URL/call CTAs and other native-flow names
- * are excluded — the WhatsApp client opens CTAs locally and there is no reply shape to fake.
+ * are excluded: the WhatsApp client opens CTAs locally and there is no reply shape to fake.
  * {@link extractBaileysButtons} is a projection of this list, so the published `buttons[]` and the
  * click allowlist cannot disagree.
  */
@@ -923,7 +923,7 @@ export function buildIncomingMessageFromBaileys(
     to: fields.fromMe ? chatId : self,
     chatId,
     // Native-flow replies sometimes put the visible label only in paramsJson (surfaced on `button`),
-    // not in `interactiveResponseMessage.body` — prefer an explicit body, else the button label.
+    // not in `interactiveResponseMessage.body`, so prefer an explicit body, else the button label.
     body: fields.body || fields.button?.text || '',
     type: mapBaileysMessageType(fields.contentType, fields.isPtt, fields.isCatalogShare),
     timestamp: fields.timestamp,
