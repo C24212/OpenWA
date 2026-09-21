@@ -62,11 +62,12 @@ export function resolveNonNegativeIntEnv(raw: string | undefined, fallback: numb
 export const MAX_TIMER_MS = 2147483647;
 
 /**
- * The UI locale Chromium is pinned to. WhatsApp Web renders its chrome — including the new-account
- * onboarding modal the whatsapp-web.js adapter dismisses (#982) — in the browser's language, and that
- * detector matches visible English text. Without a pin the language is whatever the launched binary
- * defaults to, which differs between the amd64 (Chrome for Testing) and arm64 (Debian chromium) images
- * and between host installs.
+ * The UI locale Chromium is pinned to. Without a pin the browser's language is whatever the launched
+ * binary defaults to, which differs between the amd64 (Chrome for Testing) and arm64 (Debian chromium)
+ * images and between host installs. The pin settles the browser's locale only: WhatsApp Web can still
+ * render its chrome, including the new-account onboarding modal the whatsapp-web.js adapter dismisses
+ * (#982), in the account's own language (#1679), so a non-English modal needs
+ * WWEBJS_ONBOARDING_CONTINUE_LABELS.
  */
 export const PINNED_BROWSER_LOCALE = 'en-US';
 
