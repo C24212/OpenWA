@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Webhook and automation filters accept a `chatId` condition, so a webhook can be scoped to specific groups or chats instead of only to a sender ([#1634](https://github.com/rmyndharis/OpenWA/issues/1634)). Thanks @krishshah9944 and @bhavyachopra99.
 - The dashboard Templates list has a delete button on each row, so a template can be deleted without opening it in the editor first. Like the editor's delete button, it shows only for keys that can write templates. Thanks @C24212.
 - On the dashboard Chats page, Escape closes the open chat, channel or status viewer and returns to the list. It leaves the key alone while a dialog, a menu or the media viewer is open, since those handle Escape themselves. Thanks @C24212.
+- The dashboard sidebar tells admins when a newer OpenWA release exists, as a link to its release notes next to the version. `GET /api/infra/update-check` (ADMIN) reads the latest published GitHub release through the SSRF-guarded fetch and caches it for six hours, and a failed check never surfaces as an error; `UPDATE_CHECK_ENABLED=false` turns the request off ([#988](https://github.com/rmyndharis/OpenWA/issues/988), [#1678](https://github.com/rmyndharis/OpenWA/issues/1678)). Thanks @voosam and @OneArmArmy for the request.
 
 ### Changed
 
@@ -108,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A caller-supplied URL leaves through the session proxy from this release. Set `SESSION_PROXY_URL_FETCH=false` when a session proxy is a WhatsApp-only route that cannot reach arbitrary media hosts.
 - whatsapp-web.js: `POST /api/sessions/{sessionId}/calls/{callId}/reject` answers `501` instead of a `200` that did not stop the call from ringing.
 - whatsapp-web.js: a `WWEBJS_ONBOARDING_CONTINUE_LABELS` label is clicked only on a button inside a `[role="dialog"]` or `[aria-modal="true"]` container, the same scope the `onboarding_dialog_unrecognized` warning reports labels from.
+- The gateway makes an outbound request to `api.github.com` when an admin opens the dashboard, to find the latest release. The answer is cached for six hours, or fifteen minutes after a failure. Set `UPDATE_CHECK_ENABLED=false` where that egress is not wanted.
 
 ### Security
 

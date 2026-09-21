@@ -7,6 +7,7 @@
   },
   "common": {
     "appName": "OpenWA",
+    "updateAvailable": "גרסה v{{version}} זמינה",
     "loading": "טוען...",
     "cancel": "ביטול",
     "delete": "מחיקה",
