@@ -645,9 +645,11 @@
     "noGroupsFound": "Grup bulunamadı",
     "selectGroupHint": "WhatsApp'ınızdan bir grup seçin",
     "selectAllGroups": "Tümünü seç",
+    "selectMatchingGroups": "Eşleşenleri seç",
     "clearGroupSelection": "Temizle",
-    "groupsSelectedCount": "Seçilen: {{count}}",
+    "groupsSelectedCount": "Seçilen: {{count}}/{{max}}",
     "noGroupsMatch": "Aramanızla eşleşen grup yok",
+    "forwardUsesFirstGroup": "İletme yalnızca seçilen ilk grubu, iletilecek mesajın bulunduğu sohbet olarak kullanır.",
     "phoneHint": "Boşluk bırakmadan uluslararası formatı kullanın",
     "messageType": "Mesaj Türü",
     "types": {
@@ -713,12 +715,15 @@
     "successLabel": "Başarılı",
     "failedLabel": "Başarısız",
     "groupsSentSummary": "{{sent}}/{{total}} gönderildi",
+    "groupSendCancelled": "{{count}}, iptal edildi",
+    "groupSendStopped": "{{count}}, HTTP {{status}} sonrası durduruldu",
     "response": {
       "timestamp": "Zaman Damgası",
       "messageId": "Mesaj ID'si",
       "batchId": "Toplu İşlem ID'si (Batch ID)",
       "error": "Hata",
-      "groups": "Gruplar"
+      "groups": "Gruplar",
+      "notSent": "Gönderilmedi"
     },
     "sendFailed": "Mesaj gönderilemedi",
     "notOnWhatsApp": "Bu numara WhatsApp'ta kayıtlı değil",

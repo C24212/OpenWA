@@ -645,9 +645,11 @@
     "noGroupsFound": "No groups found",
     "selectGroupHint": "Select a group from your WhatsApp",
     "selectAllGroups": "Select all",
+    "selectMatchingGroups": "Select matches",
     "clearGroupSelection": "Clear",
-    "groupsSelectedCount": "Selected: {{count}}",
+    "groupsSelectedCount": "Selected: {{count}}/{{max}}",
     "noGroupsMatch": "No groups match your search",
+    "forwardUsesFirstGroup": "Forward uses only the first selected group, as the chat to forward from.",
     "phoneHint": "Use international format without spaces",
     "messageType": "Message Type",
     "types": {
@@ -713,12 +715,15 @@
     "successLabel": "Success",
     "failedLabel": "Failed",
     "groupsSentSummary": "{{sent}}/{{total}} sent",
+    "groupSendCancelled": "{{count}}, cancelled",
+    "groupSendStopped": "{{count}}, stopped after HTTP {{status}}",
     "response": {
       "timestamp": "Timestamp",
       "messageId": "Message ID",
       "batchId": "Batch ID",
       "error": "Error",
-      "groups": "Groups"
+      "groups": "Groups",
+      "notSent": "Not sent"
     },
     "sendFailed": "Failed to send message",
     "notOnWhatsApp": "This number is not registered on WhatsApp",

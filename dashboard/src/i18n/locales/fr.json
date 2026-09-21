@@ -645,9 +645,11 @@
     "noGroupsFound": "Aucun groupe trouvé",
     "selectGroupHint": "Sélectionnez un groupe depuis votre WhatsApp",
     "selectAllGroups": "Tout sélectionner",
+    "selectMatchingGroups": "Sélectionner les résultats",
     "clearGroupSelection": "Effacer",
-    "groupsSelectedCount": "Sélectionnés : {{count}}",
+    "groupsSelectedCount": "Sélectionnés : {{count}}/{{max}}",
     "noGroupsMatch": "Aucun groupe ne correspond à votre recherche",
+    "forwardUsesFirstGroup": "Le transfert n'utilise que le premier groupe sélectionné, comme discussion d'origine.",
     "phoneHint": "Utilisez le format international sans espaces",
     "messageType": "Type de message",
     "types": {
@@ -713,12 +715,15 @@
     "successLabel": "Succès",
     "failedLabel": "Échec",
     "groupsSentSummary": "{{sent}}/{{total}} envoyés",
+    "groupSendCancelled": "{{count}}, annulés",
+    "groupSendStopped": "{{count}}, arrêté après HTTP {{status}}",
     "response": {
       "timestamp": "Horodatage",
       "messageId": "ID du message",
       "batchId": "ID du lot",
       "error": "Erreur",
-      "groups": "Groupes"
+      "groups": "Groupes",
+      "notSent": "Non envoyés"
     },
     "sendFailed": "Échec de l'envoi du message",
     "notOnWhatsApp": "Ce numéro n'est pas enregistré sur WhatsApp",

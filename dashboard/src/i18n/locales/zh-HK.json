@@ -645,9 +645,11 @@
     "noGroupsFound": "找不到群組",
     "selectGroupHint": "從你的 WhatsApp 選擇一個群組",
     "selectAllGroups": "全選",
+    "selectMatchingGroups": "選擇相符項目",
     "clearGroupSelection": "清除",
-    "groupsSelectedCount": "已選擇：{{count}}",
+    "groupsSelectedCount": "已選擇：{{count}}/{{max}}",
     "noGroupsMatch": "沒有與搜尋相符的群組",
+    "forwardUsesFirstGroup": "轉寄只會使用第一個選取的群組，作為轉寄來源對話。",
     "phoneHint": "使用不含空格的國際格式",
     "messageType": "訊息類型",
     "types": {
@@ -713,12 +715,15 @@
     "successLabel": "成功",
     "failedLabel": "失敗",
     "groupsSentSummary": "已傳送 {{sent}}/{{total}}",
+    "groupSendCancelled": "{{count}} 個，已取消",
+    "groupSendStopped": "{{count}} 個，在 HTTP {{status}} 後停止",
     "response": {
       "timestamp": "時間戳記",
       "messageId": "訊息 ID",
       "batchId": "批次 ID",
       "error": "錯誤",
-      "groups": "群組"
+      "groups": "群組",
+      "notSent": "未傳送"
     },
     "sendFailed": "傳送訊息失敗",
     "notOnWhatsApp": "此號碼未在 WhatsApp 註冊",

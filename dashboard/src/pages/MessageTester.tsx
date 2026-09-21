@@ -13,10 +13,10 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useRole } from '../hooks/useRole';
 import { useSessionsQuery, useSessionGroupsQuery } from '../hooks/queries';
 import { parseBulkRecipients, BULK_MAX_RECIPIENTS, BULK_RECIPIENTS_FILE_MAX_BYTES } from '../utils/bulkRecipients';
-import { groupLabel } from '../utils/groupSelection';
-import { sendSequentially } from '../utils/sendSequentially';
 import { PageHeader } from '../components/PageHeader';
 import { GroupPicker } from '../components/GroupPicker';
+import { groupLabel, isGatewayRefusal, planGroupSend } from '../utils/groupSelection';
+import { sendSequentially } from '../utils/sendSequentially';
 import './MessageTester.css';
 
 interface ApiResponse {
@@ -34,6 +34,9 @@ interface ApiResponse {
     sent: number;
     total: number;
     failures: { id: string; name: string; error: string }[];
+    notSent: number;
+    stoppedBy?: 'abort' | 'refusal';
+    refusedWith?: number;
   };
 }
 
@@ -107,6 +110,8 @@ export function MessageTester() {
   const [recipientType, setRecipientType] = useState<'personal' | 'group'>('personal');
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [groupSendProgress, setGroupSendProgress] = useState<{ current: number; total: number } | null>(null);
+  const [groupSendCancelling, setGroupSendCancelling] = useState(false);
+  const groupSendAbort = useRef<AbortController | null>(null);
   const [messageType, setMessageType] = useState<(typeof messageTypes)[number]>('text');
   const [content, setContent] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
@@ -166,6 +171,8 @@ export function MessageTester() {
   useEffect(() => {
     setSelectedGroups([]);
   }, [session, recipientType]);
+
+  useEffect(() => () => groupSendAbort.current?.abort(), []);
 
   const stopBatchPolling = () => {
     if (batchPollRef.current) {
@@ -299,6 +306,54 @@ export function MessageTester() {
     !formValid ||
     (messageType !== 'bulk' && (recipientType === 'group' ? selectedGroups.length === 0 : !recipient));
 
+  const isGroupSending = groupSendProgress !== null;
+
+  const sendToGroups = async (chatIds: string[], sendTo: (chatId: string) => Promise<MessageResponse>) => {
+    const controller = new AbortController();
+    groupSendAbort.current = controller;
+    const labels = new Map(groups.map(group => [group.id, groupLabel(group)]));
+    try {
+      const outcome = await sendSequentially(
+        chatIds,
+        async chatId => {
+          const result = await sendTo(chatId);
+          if (!result.messageId) throw new Error(t('messageTester.sendFailed'));
+        },
+        {
+          delayMs: GROUP_SEND_DELAY_MS,
+          signal: controller.signal,
+          stopOn: isGatewayRefusal,
+          onProgress: (current, total) => setGroupSendProgress({ current, total }),
+        },
+      );
+      setResponse({
+        success: outcome.sent === chatIds.length,
+        timestamp: new Date().toISOString(),
+        groups: {
+          sent: outcome.sent,
+          total: chatIds.length,
+          failures: outcome.failures.map(({ target, error }) => ({
+            id: target,
+            name: labels.get(target) ?? target,
+            error,
+          })),
+          notSent: outcome.notAttempted.length,
+          stoppedBy: outcome.stoppedBy,
+          refusedWith: outcome.stoppedBy === 'refusal' ? outcome.failures.at(-1)?.status : undefined,
+        },
+      });
+    } finally {
+      groupSendAbort.current = null;
+      setGroupSendProgress(null);
+      setGroupSendCancelling(false);
+    }
+  };
+
+  const cancelGroupSend = () => {
+    setGroupSendCancelling(true);
+    groupSendAbort.current?.abort();
+  };
+
   const handleSend = async () => {
     const targetId = recipientType === 'group' ? (selectedGroups[0] ?? '') : recipient;
     if (!session || (messageType !== 'bulk' && !targetId)) return;
@@ -308,80 +363,6 @@ export function MessageTester() {
     stopBatchPolling();
     setBatchStatus(null);
     setBatchError(null);
-
-    const sendToChat = async (chatId: string): Promise<MessageResponse> => {
-      let result: MessageResponse;
-      switch (messageType) {
-        case 'text':
-          result = await messageApi.sendText(session, chatId, content);
-          break;
-        case 'image':
-        case 'video':
-        case 'audio':
-        case 'document': {
-          // sendMedia unifies URL and base64 (local file) sends; base64 wins when a file is picked. The
-          // backend accepts url XOR base64 and requires a mimetype for base64 (always provided here).
-          const payload: SendMediaPayload = mediaFile
-            ? { base64: mediaFile.base64, mimetype: mediaFile.mimetype }
-            : { url: mediaUrl };
-          if ((messageType === 'image' || messageType === 'video') && content) payload.caption = content;
-          if (messageType === 'document' && content) payload.filename = content;
-          result = await messageApi.sendMedia(session, chatId, messageType, payload);
-          break;
-        }
-        case 'sticker': {
-          const payload: SendMediaPayload = mediaFile
-            ? { base64: mediaFile.base64, mimetype: mediaFile.mimetype }
-            : { url: mediaUrl };
-          result = await messageApi.sendSticker(session, chatId, payload);
-          break;
-        }
-        case 'location':
-          result = await messageApi.sendLocation(session, {
-            chatId,
-            latitude: lat,
-            longitude: lng,
-            ...(locationDescription.trim() ? { description: locationDescription.trim() } : {}),
-            ...(locationAddress.trim() ? { address: locationAddress.trim() } : {}),
-          });
-          break;
-        case 'contact':
-          result = await messageApi.sendContact(session, {
-            chatId,
-            contactName: contactName.trim(),
-            contactNumber: contactNumber.trim(),
-          });
-          break;
-        case 'poll':
-          result = await messageApi.sendPoll(session, {
-            chatId,
-            name: pollQuestion.trim(),
-            options: pollOptionsFilled,
-            ...(allowMultipleAnswers ? { allowMultipleAnswers: true } : {}),
-          });
-          break;
-        case 'forward': {
-          // toChatId passes through as-is when it is a full chat ID; a bare number is resolved
-          // through the same check-number flow as the main recipient.
-          let toChatId = forwardTo.trim();
-          if (!toChatId.includes('@')) {
-            const resolvedTo = await contactApi.checkNumber(session, toChatId.replace(/[^0-9]/g, ''));
-            if (!resolvedTo.exists || !resolvedTo.whatsappId) throw new Error(t('messageTester.notOnWhatsApp'));
-            toChatId = resolvedTo.whatsappId;
-          }
-          result = await messageApi.forward(session, {
-            // An empty fromChatId defaults to the current (already resolved) recipient.
-            fromChatId: forwardFrom.trim() || chatId,
-            toChatId,
-            messageId: forwardMessageId.trim(),
-          });
-          break;
-        }
-        default:
-          throw new Error(`Unsupported message type: ${messageType}`);
-      }
-      return result;
-    };
 
     try {
       // For a personal recipient, let the engine resolve the number to its canonical chat id rather
@@ -423,36 +404,79 @@ export function MessageTester() {
         return;
       }
 
-      if (recipientType === 'group' && messageType !== 'forward' && selectedGroups.length > 1) {
-        const groupNames = new Map(groups.map(group => [group.id, groupLabel(group)]));
-        const { sent, failures } = await sendSequentially(
-          selectedGroups,
-          async groupId => {
-            const groupResult = await sendToChat(groupId);
-            if (!groupResult.messageId) throw new Error(t('messageTester.sendFailed'));
-          },
-          {
-            delayMs: GROUP_SEND_DELAY_MS,
-            onProgress: (current, total) => setGroupSendProgress({ current, total }),
-          },
-        );
-        setResponse({
-          success: sent > 0,
-          timestamp: new Date().toISOString(),
-          groups: {
-            sent,
-            total: selectedGroups.length,
-            failures: failures.map(({ target, error }) => ({
-              id: target,
-              name: groupNames.get(target) ?? target,
-              error,
-            })),
-          },
-        });
+      const sendTo = async (target: string): Promise<MessageResponse> => {
+        switch (messageType) {
+          case 'text':
+            return messageApi.sendText(session, target, content);
+          case 'image':
+          case 'video':
+          case 'audio':
+          case 'document': {
+            // sendMedia unifies URL and base64 (local file) sends; base64 wins when a file is picked. The
+            // backend accepts url XOR base64 and requires a mimetype for base64 (always provided here).
+            const payload: SendMediaPayload = mediaFile
+              ? { base64: mediaFile.base64, mimetype: mediaFile.mimetype }
+              : { url: mediaUrl };
+            if ((messageType === 'image' || messageType === 'video') && content) payload.caption = content;
+            if (messageType === 'document' && content) payload.filename = content;
+            return messageApi.sendMedia(session, target, messageType, payload);
+          }
+          case 'sticker': {
+            const payload: SendMediaPayload = mediaFile
+              ? { base64: mediaFile.base64, mimetype: mediaFile.mimetype }
+              : { url: mediaUrl };
+            return messageApi.sendSticker(session, target, payload);
+          }
+          case 'location':
+            return messageApi.sendLocation(session, {
+              chatId: target,
+              latitude: lat,
+              longitude: lng,
+              ...(locationDescription.trim() ? { description: locationDescription.trim() } : {}),
+              ...(locationAddress.trim() ? { address: locationAddress.trim() } : {}),
+            });
+          case 'contact':
+            return messageApi.sendContact(session, {
+              chatId: target,
+              contactName: contactName.trim(),
+              contactNumber: contactNumber.trim(),
+            });
+          case 'poll':
+            return messageApi.sendPoll(session, {
+              chatId: target,
+              name: pollQuestion.trim(),
+              options: pollOptionsFilled,
+              ...(allowMultipleAnswers ? { allowMultipleAnswers: true } : {}),
+            });
+          case 'forward': {
+            // toChatId passes through as-is when it is a full chat ID; a bare number is resolved
+            // through the same check-number flow as the main recipient.
+            let toChatId = forwardTo.trim();
+            if (!toChatId.includes('@')) {
+              const resolvedTo = await contactApi.checkNumber(session, toChatId.replace(/[^0-9]/g, ''));
+              if (!resolvedTo.exists || !resolvedTo.whatsappId) throw new Error(t('messageTester.notOnWhatsApp'));
+              toChatId = resolvedTo.whatsappId;
+            }
+            return messageApi.forward(session, {
+              // An empty fromChatId defaults to the current (already resolved) recipient.
+              fromChatId: forwardFrom.trim() || target,
+              toChatId,
+              messageId: forwardMessageId.trim(),
+            });
+          }
+          default:
+            throw new Error(`Unsupported message type: ${messageType}`);
+        }
+      };
+
+      const plan = recipientType === 'group' ? planGroupSend(selectedGroups, messageType) : null;
+      if (plan?.mode === 'sequential') {
+        await sendToGroups(plan.chatIds, sendTo);
         return;
       }
 
-      const result = await sendToChat(chatId);
+      const result = await sendTo(chatId);
+
       setResponse({
         success: !!result.messageId,
         messageId: result.messageId,
@@ -467,7 +491,6 @@ export function MessageTester() {
       });
     } finally {
       setIsLoading(false);
-      setGroupSendProgress(null);
     }
   };
 
@@ -501,7 +524,7 @@ export function MessageTester() {
 
           <div className="form-group">
             <label htmlFor="mt-1">{t('messageTester.session')}</label>
-            <select id="mt-1" value={session} onChange={e => setSession(e.target.value)}>
+            <select id="mt-1" value={session} onChange={e => setSession(e.target.value)} disabled={isGroupSending}>
               {sessions.length === 0 && <option value="">{t('messageTester.noReadySessions')}</option>}
               {sessions.map(s => (
                 <option key={s.id} value={s.id}>
@@ -526,6 +549,7 @@ export function MessageTester() {
                     aria-pressed={recipientType === 'personal'}
                     className={recipientType === 'personal' ? 'active' : ''}
                     onClick={() => setRecipientType('personal')}
+                    disabled={isGroupSending}
                   >
                     {t('messageTester.personal')}
                   </button>
@@ -534,6 +558,7 @@ export function MessageTester() {
                     aria-pressed={recipientType === 'group'}
                     className={recipientType === 'group' ? 'active' : ''}
                     onClick={() => setRecipientType('group')}
+                    disabled={isGroupSending}
                   >
                     {t('messageTester.group')}
                   </button>
@@ -551,9 +576,15 @@ export function MessageTester() {
                       selectedIds={selectedGroups}
                       onChange={setSelectedGroups}
                       loading={loadingGroups}
+                      limit={BULK_MAX_RECIPIENTS}
                       labelledBy="group-picker-label"
+                      disabled={isGroupSending}
                     />
-                    <span className="hint">{t('messageTester.selectGroupHint')}</span>
+                    <span className="hint">
+                      {messageType === 'forward'
+                        ? t('messageTester.forwardUsesFirstGroup')
+                        : t('messageTester.selectGroupHint')}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -919,14 +950,21 @@ export function MessageTester() {
 
           <button className="send-btn" onClick={handleSend} disabled={isSendDisabled}>
             {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-            {isLoading
-              ? groupSendProgress
-                ? t('messageTester.sendingProgress', groupSendProgress)
-                : t('messageTester.sending')
-              : canWrite
-                ? t('messageTester.send')
-                : t('messageTester.viewOnly')}
+            {isLoading ? t('messageTester.sending') : canWrite ? t('messageTester.send') : t('messageTester.viewOnly')}
           </button>
+          <div className="group-send-status">
+            <span role="status">{groupSendProgress ? t('messageTester.sendingProgress', groupSendProgress) : ''}</span>
+            {isGroupSending && (
+              <button
+                type="button"
+                className="batch-cancel-btn"
+                onClick={cancelGroupSend}
+                disabled={groupSendCancelling}
+              >
+                {groupSendCancelling ? t('messageTester.batch.cancelling') : t('common.cancel')}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="response-panel">
@@ -999,6 +1037,19 @@ export function MessageTester() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {response.groups && response.groups.notSent > 0 && (
+                  <div className="detail-row">
+                    <span className="detail-label">{t('messageTester.response.notSent')}</span>
+                    <span className="detail-value">
+                      {response.groups.stoppedBy === 'refusal'
+                        ? t('messageTester.groupSendStopped', {
+                            count: response.groups.notSent,
+                            status: response.groups.refusedWith,
+                          })
+                        : t('messageTester.groupSendCancelled', { count: response.groups.notSent })}
+                    </span>
                   </div>
                 )}
               </div>

@@ -660,9 +660,11 @@
     "noGroupsFound": "لم يتم العثور على مجموعات",
     "selectGroupHint": "اختر مجموعة من واتساب الخاص بك",
     "selectAllGroups": "تحديد الكل",
+    "selectMatchingGroups": "تحديد النتائج",
     "clearGroupSelection": "مسح",
-    "groupsSelectedCount": "المحدد: {{count}}",
+    "groupsSelectedCount": "المحدد: {{count}}/{{max}}",
     "noGroupsMatch": "لا توجد مجموعات تطابق بحثك",
+    "forwardUsesFirstGroup": "تستخدم إعادة التوجيه أول مجموعة محددة فقط، كمحادثة يُعاد التوجيه منها.",
     "phoneHint": "استخدم الصيغة الدولية بدون مسافات",
     "messageType": "نوع الرسالة",
     "types": {
@@ -728,12 +730,15 @@
     "successLabel": "نجاح",
     "failedLabel": "فشل",
     "groupsSentSummary": "تم إرسال {{sent}}/{{total}}",
+    "groupSendCancelled": "{{count}}، أُلغيت",
+    "groupSendStopped": "{{count}}، توقف بعد HTTP {{status}}",
     "response": {
       "timestamp": "الوقت",
       "messageId": "معرّف الرسالة",
       "batchId": "معرّف الدفعة",
       "error": "خطأ",
-      "groups": "المجموعات"
+      "groups": "المجموعات",
+      "notSent": "لم تُرسل"
     },
     "sendFailed": "فشل إرسال الرسالة",
     "notOnWhatsApp": "هذا الرقم غير مسجَّل على واتساب",

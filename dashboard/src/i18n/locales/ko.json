@@ -645,9 +645,11 @@
     "noGroupsFound": "그룹을 찾을 수 없습니다",
     "selectGroupHint": "내 WhatsApp에서 그룹을 선택하세요",
     "selectAllGroups": "모두 선택",
+    "selectMatchingGroups": "검색 결과 선택",
     "clearGroupSelection": "선택 해제",
-    "groupsSelectedCount": "선택됨: {{count}}",
+    "groupsSelectedCount": "선택됨: {{count}}/{{max}}",
     "noGroupsMatch": "검색과 일치하는 그룹이 없습니다",
+    "forwardUsesFirstGroup": "전달은 선택한 첫 번째 그룹만 원본 채팅으로 사용합니다.",
     "phoneHint": "공백 없이 국제 형식으로 입력하세요",
     "messageType": "메시지 유형",
     "types": {
@@ -713,12 +715,15 @@
     "successLabel": "성공",
     "failedLabel": "실패",
     "groupsSentSummary": "{{sent}}/{{total}}개 전송됨",
+    "groupSendCancelled": "{{count}}개, 취소됨",
+    "groupSendStopped": "{{count}}개, HTTP {{status}} 후 중지됨",
     "response": {
       "timestamp": "타임스탬프",
       "messageId": "메시지 ID",
       "batchId": "배치 ID",
       "error": "오류",
-      "groups": "그룹"
+      "groups": "그룹",
+      "notSent": "보내지 않음"
     },
     "sendFailed": "메시지를 보내지 못했습니다",
     "notOnWhatsApp": "이 번호는 WhatsApp에 등록되어 있지 않습니다",

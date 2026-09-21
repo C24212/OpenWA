@@ -645,9 +645,11 @@
     "noGroupsFound": "Keine Gruppen gefunden",
     "selectGroupHint": "Wähle eine Gruppe aus deinem WhatsApp-Konto aus",
     "selectAllGroups": "Alle auswählen",
+    "selectMatchingGroups": "Treffer auswählen",
     "clearGroupSelection": "Auswahl aufheben",
-    "groupsSelectedCount": "Ausgewählt: {{count}}",
+    "groupsSelectedCount": "Ausgewählt: {{count}}/{{max}}",
     "noGroupsMatch": "Keine Gruppen passen zu deiner Suche",
+    "forwardUsesFirstGroup": "Weiterleiten verwendet nur die erste ausgewählte Gruppe, als Chat, aus dem weitergeleitet wird.",
     "phoneHint": "Verwende das internationale Format ohne Leerzeichen",
     "messageType": "Nachrichtentyp",
     "types": {
@@ -713,12 +715,15 @@
     "successLabel": "Erfolgreich",
     "failedLabel": "Fehlgeschlagen",
     "groupsSentSummary": "{{sent}}/{{total}} gesendet",
+    "groupSendCancelled": "{{count}}, abgebrochen",
+    "groupSendStopped": "{{count}}, gestoppt nach HTTP {{status}}",
     "response": {
       "timestamp": "Zeitstempel",
       "messageId": "Nachrichten-ID",
       "batchId": "Batch-ID",
       "error": "Fehler",
-      "groups": "Gruppen"
+      "groups": "Gruppen",
+      "notSent": "Nicht gesendet"
     },
     "sendFailed": "Nachricht konnte nicht gesendet werden",
     "notOnWhatsApp": "Diese Nummer ist nicht bei WhatsApp registriert",
