@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The dashboard disables a session's Start and Reconnect buttons while its start request is in flight.
 - whatsapp-web.js sessions no longer report a call rejection that did not stop the call: the call reject route answers `501` and `autoRejectCalls` logs a failed auto-reject.
 - A Baileys session added to or joining a group emits `group.join`, as whatsapp-web.js already did.
+- A send that fails inside the engine logs a warning carrying the session, chat, message id and the engine's error, where only Nest's generic `[ExceptionsHandler]` line recorded it before ([#1679](https://github.com/rmyndharis/OpenWA/issues/1679)). Thanks @DavidgFernandes for the report.
 
 ### Documentation
 
