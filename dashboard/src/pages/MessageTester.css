@@ -300,6 +300,10 @@
   color: var(--error-text);
 }
 
+.message-tester .form-group .hint:empty {
+  margin-top: 0;
+}
+
 /* Side-by-side pair (location latitude/longitude). */
 .message-tester .form-row {
   display: grid;

@@ -14,8 +14,13 @@ import { useRole } from '../hooks/useRole';
 import { useSessionsQuery, useSessionGroupsQuery } from '../hooks/queries';
 import { parseBulkRecipients, BULK_MAX_RECIPIENTS, BULK_RECIPIENTS_FILE_MAX_BYTES } from '../utils/bulkRecipients';
 import {
+  BULK_CAPTION_MAX_LENGTH,
+  BULK_INLINE_MEDIA_MAX_BYTES,
   BULK_MEDIA_KINDS,
   buildBulkMessages,
+  formatFileSize,
+  inlineMediaBudgetBytes,
+  isHttpMediaUrl,
   mediaKindFromMime,
   mediaKindFromUrl,
   toBulkAttachment,
@@ -91,8 +96,6 @@ const fallbackMime: Record<(typeof messageTypes)[number], string> = {
 // backend's MEDIA_DOWNLOAD_MAX_BYTES (default 50 MiB) stays authoritative for URL sends (fetched server-side).
 const MEDIA_UPLOAD_MAX_BYTES = 18 * 1024 * 1024;
 
-const BULK_INLINE_MEDIA_MAX_BYTES = 24 * 1024 * 1024;
-
 // Batch statuses that stop the progress polling (mirrors the backend BatchStatus enum).
 const TERMINAL_BATCH_STATUSES: readonly BatchStatus[] = ['completed', 'cancelled', 'failed'];
 
@@ -144,6 +147,7 @@ export function MessageTester() {
   const [bulkRecipients, setBulkRecipients] = useState('');
   const [bulkDelay, setBulkDelay] = useState('');
   const [bulkMediaKind, setBulkMediaKind] = useState<BulkMediaKind>('document');
+  const [bulkMediaKindChosen, setBulkMediaKindChosen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<ApiResponse | null>(null);
   // Live bulk-batch progress, polled every ~2s while the batch runs (see startBatchPolling).
@@ -268,7 +272,10 @@ export function MessageTester() {
       setMediaFile({ base64, mimetype, filename: file.name });
       setMediaUrl('');
       if (messageType === 'document') setContent(file.name);
-      if (messageType === 'bulk') setBulkMediaKind(mediaKindFromMime(mimetype));
+      if (messageType === 'bulk') {
+        setBulkMediaKind(mediaKindFromMime(mimetype));
+        setBulkMediaKindChosen(false);
+      }
     };
     reader.onerror = () => {
       if (mediaReadSeq.current !== myRead) return;
@@ -288,6 +295,9 @@ export function MessageTester() {
     messageType === 'bulk' &&
     !!mediaFile &&
     mediaFile.base64.length * bulkRecipientList.length > BULK_INLINE_MEDIA_MAX_BYTES;
+  const bulkMediaUrlInvalid =
+    messageType === 'bulk' && !mediaFile && mediaUrl.trim() !== '' && !isHttpMediaUrl(mediaUrl);
+  const bulkCaptionTooLong = bulkAttachment !== null && content.length > BULK_CAPTION_MAX_LENGTH;
 
   // Per-type required-field validation for the newer types; text/media keep their original behavior
   // (the backend stays the authoritative validator either way).
@@ -306,6 +316,8 @@ export function MessageTester() {
     formValid =
       (content.trim().length > 0 || bulkAttachment !== null) &&
       !bulkMediaTooLarge &&
+      !bulkMediaUrlInvalid &&
+      !bulkCaptionTooLong &&
       bulkRecipientList.length > 0 &&
       bulkRecipientList.length <= BULK_MAX_RECIPIENTS &&
       (delayMs === undefined || (!Number.isNaN(delayMs) && delayMs >= 1000 && delayMs <= 60000));
@@ -486,11 +498,19 @@ export function MessageTester() {
             // in flight (its late onload would otherwise re-clear this URL).
             mediaReadSeq.current += 1;
             if (mediaFile) setMediaFile(null);
-            if (messageType === 'bulk') setBulkMediaKind(mediaKindFromUrl(e.target.value));
+            if (messageType === 'bulk') {
+              if (!e.target.value.trim()) setBulkMediaKindChosen(false);
+              else if (!bulkMediaKindChosen) setBulkMediaKind(mediaKindFromUrl(e.target.value));
+            }
           }}
           placeholder="https://example.com/file.jpg"
           disabled={!!mediaFile}
         />
+        {messageType === 'bulk' && (
+          <span className="hint error" role="status">
+            {bulkMediaUrlInvalid ? t('messageTester.bulkMediaUrlInvalid') : ''}
+          </span>
+        )}
       </div>
       <div className="form-group">
         <label>
@@ -519,9 +539,12 @@ export function MessageTester() {
           onChange={handleFileChange}
         />
         {messageType === 'bulk' && (
-          <span className={bulkMediaTooLarge ? 'hint error' : 'hint'} role={bulkMediaTooLarge ? 'alert' : undefined}>
+          <span className={bulkMediaTooLarge ? 'hint error' : 'hint'} role="status">
             {bulkMediaTooLarge
-              ? t('messageTester.bulkMediaTooLarge', { count: bulkRecipientList.length })
+              ? t('messageTester.bulkMediaTooLarge', {
+                  count: bulkRecipientList.length,
+                  size: formatFileSize(inlineMediaBudgetBytes(bulkRecipientList.length)),
+                })
               : t('messageTester.bulkMediaHint')}
           </span>
         )}
@@ -644,7 +667,10 @@ export function MessageTester() {
                     // category would route stale bytes to the wrong send-${type} endpoint — clear it.
                     if (type !== messageType) {
                       clearMediaFile();
-                      if (type === 'bulk' || messageType === 'bulk') setMediaUrl('');
+                      if (type === 'bulk' || messageType === 'bulk') {
+                        setMediaUrl('');
+                        setBulkMediaKindChosen(false);
+                      }
                     }
                     setMessageType(type);
                   }}
@@ -915,6 +941,11 @@ export function MessageTester() {
                   placeholder={t('messageTester.messagePlaceholder')}
                   rows={4}
                 />
+                <span className="hint error" role="status">
+                  {bulkCaptionTooLong
+                    ? t('messageTester.bulkCaptionTooLong', { max: BULK_CAPTION_MAX_LENGTH, count: content.length })
+                    : ''}
+                </span>
               </div>
               {mediaSourceFields}
               {bulkAttachment && (
@@ -933,7 +964,10 @@ export function MessageTester() {
                         type="button"
                         aria-pressed={bulkMediaKind === kind}
                         className={bulkMediaKind === kind ? 'active' : ''}
-                        onClick={() => setBulkMediaKind(kind)}
+                        onClick={() => {
+                          setBulkMediaKind(kind);
+                          setBulkMediaKindChosen(true);
+                        }}
                       >
                         {t(`messageTester.types.${kind}`)}
                       </button>

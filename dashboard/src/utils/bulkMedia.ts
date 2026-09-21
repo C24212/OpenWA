@@ -4,6 +4,12 @@ export type BulkMediaKind = 'image' | 'video' | 'audio' | 'document';
 
 export const BULK_MEDIA_KINDS: readonly BulkMediaKind[] = ['image', 'video', 'audio', 'document'];
 
+// Total base64 across all items: the default 25 MB BODY_SIZE_LIMIT minus room for the JSON envelope.
+// A gateway running with a lower BODY_SIZE_LIMIT rejects smaller requests, which the dashboard can't know.
+export const BULK_INLINE_MEDIA_MAX_BYTES = 24 * 1024 * 1024;
+
+export const BULK_CAPTION_MAX_LENGTH = 1024;
+
 export interface BulkAttachment {
   kind: BulkMediaKind;
   media: BulkMediaPayload;
@@ -27,6 +33,24 @@ const KIND_BY_EXTENSION: Record<string, BulkMediaKind> = {
   aac: 'audio',
   wav: 'audio',
 };
+
+export function isHttpMediaUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url.trim());
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function inlineMediaBudgetBytes(recipientCount: number): number {
+  return Math.floor((BULK_INLINE_MEDIA_MAX_BYTES / Math.max(recipientCount, 1)) * 0.75);
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${Number((bytes / (1024 * 1024)).toFixed(1))} MB`;
+  return `${Math.max(1, Math.floor(bytes / 1024))} KB`;
+}
 
 export function mediaKindFromMime(mimetype: string): BulkMediaKind {
   const category = mimetype.split('/')[0]?.toLowerCase();
@@ -60,7 +84,7 @@ export function toBulkAttachment(
   url: string,
 ): BulkAttachment | null {
   const trimmedUrl = url.trim();
-  if (!file && !trimmedUrl) return null;
+  if (!file && !isHttpMediaUrl(trimmedUrl)) return null;
   const media: BulkMediaPayload = file ? { base64: file.base64, mimetype: file.mimetype } : { url: trimmedUrl };
   if (kind === 'document') {
     const filename = file ? file.filename : filenameFromUrl(trimmedUrl);

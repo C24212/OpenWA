@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   buildBulkMessages,
   filenameFromUrl,
+  formatFileSize,
+  inlineMediaBudgetBytes,
+  isHttpMediaUrl,
   mediaKindFromMime,
   mediaKindFromUrl,
   toBulkAttachment,
@@ -37,6 +40,33 @@ test('derives a decoded filename from the URL path', () => {
 
 test('no file and a blank URL means no attachment', () => {
   assert.equal(toBulkAttachment('image', null, '   '), null);
+});
+
+test('only http and https URLs count as media URLs', () => {
+  assert.equal(isHttpMediaUrl('https://cdn.example.com/a.pdf'), true);
+  assert.equal(isHttpMediaUrl(' HTTP://cdn.example.com/a.pdf '), true);
+  assert.equal(isHttpMediaUrl('cdn.example.com/pricelist.pdf'), false);
+  assert.equal(isHttpMediaUrl('file:///etc/passwd'), false);
+  assert.equal(isHttpMediaUrl('data:application/pdf;base64,QUJD'), false);
+  assert.equal(isHttpMediaUrl('ftp://cdn.example.com/a.pdf'), false);
+});
+
+test('a URL that is not http(s) gives no attachment', () => {
+  assert.equal(toBulkAttachment('document', null, 'cdn.example.com/pricelist.pdf'), null);
+  assert.equal(toBulkAttachment('document', null, 'data:application/pdf;base64,QUJD'), null);
+});
+
+test('the per-file budget shrinks with the recipient count', () => {
+  assert.equal(inlineMediaBudgetBytes(1), 18 * 1024 * 1024);
+  assert.equal(formatFileSize(inlineMediaBudgetBytes(1)), '18 MB');
+  assert.equal(formatFileSize(inlineMediaBudgetBytes(50)), '368 KB');
+  assert.equal(formatFileSize(inlineMediaBudgetBytes(100)), '184 KB');
+  assert.equal(inlineMediaBudgetBytes(0), inlineMediaBudgetBytes(1));
+});
+
+test('formats sizes in KB below a megabyte and MB above', () => {
+  assert.equal(formatFileSize(512), '1 KB');
+  assert.equal(formatFileSize(1536 * 1024), '1.5 MB');
 });
 
 test('a picked file is sent inline and wins over a URL', () => {
