@@ -8,6 +8,7 @@ import {
   EngineStatus,
 } from '../interfaces/whatsapp-engine.interface';
 import { EngineNotReadyError } from '../../common/errors/engine-not-ready.error';
+import { EngineTransportError } from '../../common/errors/engine-transport.error';
 import { type createLogger } from '../../common/services/logger.service';
 import { MAX_TIMER_MS } from '../../config/configuration';
 import { resolveWebVersionPin } from '../wa-web-version';
@@ -16,6 +17,7 @@ import { killOrphanedChromiumProcesses, removeStaleSingletonFiles } from './chro
 import { isSupportedProxyUrl, buildProxyLaunchConfig } from './wwebjs-proxy';
 import { BACKPORT_MISSING_MESSAGE, isBackportMissing } from './wwebjs-backport-check';
 import { unappliedPatches, unappliedPatchesMessage } from './engine-patch-status';
+import { reportMissingCallHook } from './wwebjs-call-hook-check';
 import { type WhatsAppWebJsConfig } from './whatsapp-web-js.adapter';
 import { AUTH_FAILURE_REASON, STALE_PROFILE_ADVICE } from '../terminal-engine-failure';
 import { wwjsAuthDir } from '../auth-dir-paths';
@@ -786,6 +788,26 @@ export class WwebjsLifecycle {
     // gets the companion unlinked (~5m later → disconnected: LOGOUT, #982). Dismiss it best-effort
     // and fall back to ACTION_REQUIRED. Started after READY so a non-ready session never arms it.
     this.host.startOnboardingWatcher();
+    // whatsapp-web.js patches the call collection only when the page's module for it exposes an
+    // `.on` function. A WhatsApp Web build that keeps the module but drops that method skips the
+    // hook while the rest of the evaluate completes, so the session looks healthy, keeps delivering
+    // messages, and reports no call at all. That quiet case is the one worth a line in the log; a
+    // build that removes the module instead makes the library's own require throw, aborting the
+    // evaluate and taking the inbound message bridge with it, which is loud on its own. Warn once
+    // per ready; nothing else changes, since only detection is lost. Fire-and-forget: a diagnostic
+    // must never delay or fail the promotion to READY.
+    //
+    // Skipped on a tree missing the ready-sync patch: without it the session can reach READY while
+    // that same evaluate is still running, so the probe would read a page whose hook simply has not
+    // been installed YET and warn about a problem that does not exist. An unpatched tree already
+    // reports itself at startup, which is the honest signal there.
+    if (!unappliedPatches('wwebjs').includes('patch-wwebjs-ready-sync')) {
+      void reportMissingCallHook(
+        (this.client as unknown as { pupPage?: { evaluate: <T>(fn: () => T) => Promise<T> } } | null)?.pupPage,
+        this.host.logger,
+        this.host.config.sessionId,
+      );
+    }
   }
 
   /** The single status-transition funnel: latches disconnectReported, fires the callback, re-emits
@@ -1058,6 +1080,16 @@ export class WwebjsLifecycle {
           throw error;
         }
         if (attempt < PAIRING_CODE_MAX_ATTEMPTS) {
+          // Nothing cancels the abandoned attempt, and nothing needs to. The library's own
+          // requestPairingCode clears the in-page re-request interval as the first act of its
+          // evaluate, so the next attempt stops the previous flow itself. Its `cancelPairingCode`
+          // would on top of that return the page to QR mode, which is the opposite of what a retry
+          // wants, and it is an unbounded page evaluate against the page that is already unwell, so
+          // awaiting it would add a full Puppeteer protocol timeout to each gap. The abandoned flow
+          // is not inert: each tick of its interval asks WhatsApp for a fresh code and notifies the
+          // phone, and its CODE_RECEIVED event reaches nothing here. What bounds it is the page, not
+          // us: the interval dies with the next WhatsApp Web reload, which happens every few seconds
+          // while the session is UNPAIRED, and with the session itself.
           await new Promise<void>(resolve => {
             const t = setTimeout(resolve, PAIRING_CODE_RETRY_DELAY_MS);
             t.unref?.();
@@ -1073,7 +1105,13 @@ export class WwebjsLifecycle {
         }
       }
     }
-    // Every attempt hit a transient navigation/timeout: surface the last one rather than a hang.
-    throw lastError;
+    // Every attempt hit a transient navigation/timeout, so the budget ran out on the transport rather
+    // than on anything the caller sent. Reported as EngineTransportError (503) so a caller reads it as
+    // retryable: a plain Error here surfaced as a 500, which says the gateway is broken and that
+    // retrying is pointless. The last attempt's reason rides along as the detail.
+    throw new EngineTransportError(
+      `Pairing code could not be generated after ${PAIRING_CODE_MAX_ATTEMPTS} attempts: ` +
+        `${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    );
   }
 }

@@ -331,6 +331,16 @@ export interface ReplyMessageRequest {
   mentions?: string[];
 }
 
+export interface ClickButtonRequest {
+  chatId: Jid;
+  /** WhatsApp id of the business prompt that offered the buttons. */
+  messageId: string;
+  /** Stable id of the choice (inbound `buttons[].id`). */
+  buttonId: string;
+  /** Visible label; resolved from the stored prompt when omitted. */
+  text?: string;
+}
+
 export interface ForwardMessageRequest {
   fromChatId: Jid;
   toChatId: Jid;
@@ -563,8 +573,8 @@ export interface ChatHistoryMessage {
   isLidSender?: boolean;
   senderPhone?: string | null;
   /**
-   * Sender contact info, best-effort from the engine's cache. History carries `pushName` only;
-   * the richer fields arrive on `message.received` when `WEBHOOK_CONTACT_DETAILS=true`.
+   * Sender contact info, best-effort from the engine's cache. History carries `name` and `pushName`;
+   * the richer fields are added when `WEBHOOK_CONTACT_DETAILS=true`, as on `message.received`.
    */
   contact?: {
     id?: Jid;

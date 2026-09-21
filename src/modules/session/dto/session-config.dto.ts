@@ -21,7 +21,7 @@ export class UpdateSessionConfigDto {
       'Auto-reject every incoming call as soon as it rings. Baileys engine only: whatsapp-web.js cannot ' +
       'reject a call. The call.received event is still ' +
       'emitted first, so a webhook consumer sees the call regardless. Takes effect on the next ' +
-      'incoming call — the session is not restarted.',
+      'incoming call, and the session is not restarted.',
     example: true,
     nullable: true,
     // Explicit because the TypeScript type is a union: emitDecoratorMetadata reduces `boolean | null`
@@ -37,7 +37,9 @@ export class UpdateSessionConfigDto {
     description:
       'Cap on consecutive reconnect attempts (`0` disables reconnect entirely). Send `null` for ' +
       'unlimited, which is the default. Applies on the next session start, not to a reconnect ' +
-      'sequence already in flight.',
+      "sequence already in flight. Bounds the gateway's own reconnect, which is every reconnect on " +
+      'whatsapp-web.js and, on Baileys, only the one after a logged-out close: the Baileys engine ' +
+      'retries a transient drop itself, with a fixed 1s to 60s backoff and no cap.',
     minimum: 0,
     maximum: 20,
     example: 5,
@@ -56,7 +58,8 @@ export class UpdateSessionConfigDto {
   @ApiPropertyOptional({
     description:
       'Base delay of the reconnect backoff in milliseconds. Applies on the next session start, ' +
-      'not to a reconnect sequence already in flight.',
+      'not to a reconnect sequence already in flight. Same engine scope as `maxReconnectAttempts`: ' +
+      "the Baileys engine's internal retry uses its own fixed backoff instead.",
     minimum: 1000,
     maximum: 300000,
     example: 5000,
@@ -85,13 +88,18 @@ export class SessionConfigResponseDto {
   autoRejectCalls!: boolean;
 
   @ApiProperty({
-    description: 'Reconnect attempt cap; `null` means unlimited',
+    description:
+      "Reconnect attempt cap; `null` means unlimited. Bounds the gateway's own reconnect (every " +
+      'reconnect on whatsapp-web.js; on Baileys only the one after a logged-out close).',
     example: 5,
     nullable: true,
     type: Number,
   })
   maxReconnectAttempts!: number | null;
 
-  @ApiProperty({ description: 'Base reconnect backoff in milliseconds', example: 5000 })
+  @ApiProperty({
+    description: 'Base reconnect backoff in milliseconds, on the same engine scope as `maxReconnectAttempts`',
+    example: 5000,
+  })
   reconnectBaseDelay!: number;
 }

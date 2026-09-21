@@ -113,6 +113,7 @@
     "groupSubtitle": "그룹",
     "privateContactSubtitle": "개인 연락처",
     "deleteConfirm": "모두에게서 이 메시지를 삭제할까요?",
+    "promptButtons": "메시지 선택지",
     "messageDeleted": "🚫 삭제된 메시지입니다",
     "messageMasked": "🔒 연결된 기기에서는 WhatsApp이 이 메시지를 가려 표시합니다 — 기본 휴대폰을 확인하세요",
     "kind": {
@@ -162,6 +163,7 @@
       "send": "메시지를 보내지 못했습니다",
       "react": "메시지에 반응하지 못했습니다",
       "delete": "메시지를 삭제하지 못했습니다",
+      "clickButton": "버튼 클릭에 실패했습니다",
       "fileTooLarge": "파일이 너무 큽니다 (최대 18 MB)"
     },
     "loadMessagesError": "메시지를 불러올 수 없습니다. 서버 로그를 확인하세요.",
@@ -379,6 +381,7 @@
       "phoneLabel": "전화번호",
       "phonePlaceholder": "예: 919876543210",
       "phoneHint": "국제 형식(국가 코드 + 번호)으로 숫자만 입력하세요(+, 공백, 하이픈 제외).",
+      "relinkWarning": "whatsapp-web.js 엔진에서는 이미 연결된 세션이 있는 번호로 코드를 요청하면 WhatsApp이 해당 기기의 연결을 해제할 수 있습니다. 그 세션을 유지해야 한다면 QR 탭을 사용하세요.",
       "invalidPhone": "올바른 전화번호를 입력하세요: 6~15자리 숫자, 국가 코드로 시작, 기호 없이.",
       "generateButton": "페어링 코드 생성",
       "generating": "페어링 코드를 생성하는 중...",
@@ -432,6 +435,7 @@
       "fields": {
         "sender": "보낸 사람",
         "recipient": "받는 사람",
+        "chatId": "채팅 ID",
         "body": "메시지 본문",
         "type": "메시지 유형",
         "isGroup": "그룹 채팅 여부",

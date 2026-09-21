@@ -560,8 +560,8 @@ class MessageProduct(TypedDict):
 
 
 class MessageContact(TypedDict, total=False):
-    """Sender contact block. History carries ``pushName`` only; the richer fields arrive on
-    ``message.received`` when ``WEBHOOK_CONTACT_DETAILS`` is enabled."""
+    """Sender contact block. History carries ``name`` and ``pushName``; the richer fields are
+    added when ``WEBHOOK_CONTACT_DETAILS`` is enabled, as on ``message.received``."""
 
     id: Jid
     number: str
@@ -1102,6 +1102,15 @@ class VotePollRequest(TypedDict):
     chatId: str
     pollMessageId: str
     options: list[str]
+
+
+class ClickButtonRequest(TypedDict):
+    """Click a choice on a WhatsApp Business prompt. Baileys only."""
+
+    chatId: str
+    messageId: str
+    buttonId: str
+    text: NotRequired[str]
 
 
 class StarMessageRequest(TypedDict):

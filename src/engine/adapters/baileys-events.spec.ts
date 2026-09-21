@@ -95,13 +95,12 @@ function makeHost(overrides: Partial<BaileysEventsHost> = {}): BaileysEventsHost
     getFetchDispatcher: () => undefined,
     toNeutralJid: (jid: string) => jid,
     normalizedSelfJid: () => '6280000000000@s.whatsapp.net',
-    // connectedAt only gates handleMessagesUpsert's history-replay skip; mapMessage itself never
-    // reads it.
-    connectedAt: 0,
     inboundLimiter: new ConcurrencyLimiter(inboundMediaConcurrency()),
     recordKeyLidMappings: noop,
     recordMessage: noop,
     recordMessageEdit: noop,
+    consumeOwnSend: () => false,
+    getStoredMessage: () => undefined,
     putStoredMessage: () => undefined,
     getOnMessage: () => undefined,
     getOnMessageCreate: () => undefined,

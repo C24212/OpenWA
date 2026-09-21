@@ -77,6 +77,11 @@ class FakeSock extends EventEmitter {
   // Baileys answers this by emitting its own connection.update carrying the result, so the default
   // mirrors that: resolving alone proves nothing reached the adapter.
   public fetchAccountReachoutTimelock = jest.fn().mockResolvedValue({ isActive: false });
+  public resyncAppState = jest.fn().mockResolvedValue(undefined);
+  public authState = {
+    creds: { accountSyncCounter: 0 },
+    keys: { set: jest.fn().mockResolvedValue(undefined) },
+  };
   public signalRepository: { lidMapping: { getLIDForPN: jest.Mock } } | undefined;
   fire(event: string, arg: unknown): void {
     this.emitter.emit(event, arg);
@@ -122,6 +127,7 @@ jest.mock('@whiskeysockets/baileys', () => ({
   normalizeMessageContent: jest.fn((c: unknown) => c),
   // The pinned protocol node targets this JID; exported from the real module's WABinary surface.
   S_WHATSAPP_NET: '@s.whatsapp.net',
+  ALL_WA_PATCH_NAMES: ['critical_block', 'critical_unblock_low', 'regular_high', 'regular_low', 'regular'],
   DisconnectReason: { loggedOut: 401, forbidden: 403, restartRequired: 515, connectionReplaced: 440 },
   proto: {
     Message: {
@@ -167,6 +173,12 @@ const fakeStore = {
   getMessages: jest.fn().mockResolvedValue([]),
   clearSession: jest.fn().mockResolvedValue(undefined),
 };
+
+// clearAllMocks keeps implementations: a store lookup one test taught to return a message must not
+// make a later fromMe delivery look like a re-delivered one (processInboundMessage drops those).
+beforeEach(() => {
+  fakeStore.getMessage.mockReset();
+});
 
 /** A fresh async-iterable stream of the given chunks (the shape `downloadMediaMessage('stream')` returns). */
 function streamOf(...chunks: Buffer[]): AsyncIterable<Buffer> & { destroy: () => void } {
@@ -2254,21 +2266,51 @@ describe('BaileysAdapter inbound fan-out', () => {
     expect(onMessage).not.toHaveBeenCalled();
   });
 
-  it('ignores an append upsert with no/old timestamp (real history backfill)', async () => {
+  // WhatsApp replays what it queued while the session was down, and Baileys tags that batch
+  // 'append' (messages-recv.js: `node.attrs.offline ? 'append' : 'notify'`). Those messages
+  // necessarily predate the reconnect, so a timestamp gate drops exactly the traffic an operator
+  // most needs. Real history arrives on messaging-history.set instead, which never dispatches.
+  it('processes an append upsert that predates the reconnect (WhatsApp offline queue)', async () => {
     const onMessage = jest.fn();
     const adapter = newAdapter();
     await adapter.initialize({ onMessage });
-    fakeSock.fire('connection.update', { connection: 'open' }); // sets connectedAt
+    fakeSock.fire('connection.update', { connection: 'open' });
     fakeSock.fire('messages.upsert', {
       type: 'append',
       messages: [
         {
-          key: { remoteJid: '628111@s.whatsapp.net', fromMe: false, id: 'OLD' },
-          message: { conversation: 'old' },
-          messageTimestamp: Math.floor(Date.now() / 1000) - 3600, // an hour before connectedAt
+          key: { remoteJid: '628111@s.whatsapp.net', fromMe: false, id: 'QUEUED_WHILE_DOWN' },
+          message: { conversation: 'sent while the gateway was down' },
+          messageTimestamp: Math.floor(Date.now() / 1000) - 3600, // an hour before the reconnect
         },
       ],
     });
+    await new Promise(r => setImmediate(r));
+    expect(onMessage).toHaveBeenCalledTimes(1);
+  });
+
+  // The invariant the offline-queue case above rests on: real history is bulk, arrives on its own
+  // event, and is handed over dispatch-free. Nothing here reaches the message webhook.
+  it('never dispatches bulk history as an inbound message', async () => {
+    const onMessage = jest.fn();
+    const onHistoryMessages = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessage, onHistoryMessages });
+    fakeSock.fire('connection.update', { connection: 'open' });
+    fakeSock.fire('messaging-history.set', {
+      contacts: [],
+      chats: [],
+      messages: [
+        {
+          key: { remoteJid: '628111@s.whatsapp.net', fromMe: false, id: 'HIST' },
+          message: { conversation: 'from the history sync' },
+          messageTimestamp: 1700000000,
+        },
+      ],
+    });
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
+    expect(onHistoryMessages).toHaveBeenCalledTimes(1);
     expect(onMessage).not.toHaveBeenCalled();
   });
 
@@ -2294,29 +2336,145 @@ describe('BaileysAdapter inbound fan-out', () => {
     expect(onMessage).toHaveBeenCalled();
   });
 
-  it('does not double-fire onMessageCreate for a recent append echo of our own send', async () => {
-    // Baileys echoes our own just-sent messages back through messages.upsert tagged 'append' too.
-    // sendContent() already emits onMessageCreate for those via emitOwnSendEcho() (not exercised by
-    // this fakeSock harness) — the recency override must stay scoped to fromMe !== true so this
-    // path doesn't ALSO fire onMessageCreate a second time for the same send.
+  // Baileys echoes every API send back through messages.upsert tagged 'append', and sendContent()
+  // already emits onMessageCreate for it via emitOwnSendEcho(). The echo is told apart by its id,
+  // which the adapter recorded when it sent; nothing else on the batch distinguishes it from a
+  // message the phone typed while the gateway was down.
+  it('does not double-fire onMessageCreate for the append echo of a message this session sent', async () => {
+    fakeSock.sendMessage.mockResolvedValue({
+      key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'OWN_ECHO' },
+      message: { conversation: 'sent by us' },
+      messageTimestamp: 1700000001,
+    });
     const onMessage = jest.fn();
     const onMessageCreate = jest.fn();
     const adapter = newAdapter();
     await adapter.initialize({ onMessage, onMessageCreate });
-    fakeSock.fire('connection.update', { connection: 'open' }); // sets connectedAt
+    fakeSock.fire('connection.update', { connection: 'open' });
+    await adapter.sendTextMessage('628111@s.whatsapp.net', 'sent by us');
+    await new Promise(r => setImmediate(r));
+    expect(onMessageCreate).toHaveBeenCalledTimes(1); // the adapter's own echo
+
     fakeSock.fire('messages.upsert', {
       type: 'append',
       messages: [
         {
           key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'OWN_ECHO' },
           message: { conversation: 'sent by us' },
-          messageTimestamp: Math.floor(Date.now() / 1000),
+          messageTimestamp: 1700000001,
         },
       ],
     });
     await new Promise(r => setImmediate(r));
     expect(onMessage).not.toHaveBeenCalled();
-    expect(onMessageCreate).not.toHaveBeenCalled();
+    expect(onMessageCreate).toHaveBeenCalledTimes(1); // the library echo added nothing
+  });
+
+  // The account's own phone kept working while the gateway was down. WhatsApp replays what it sent
+  // in that window through the same 'append' tag as the API echo above, and only the id says it is
+  // not ours. It is an outgoing message the session never saw, so it goes out as onMessageCreate.
+  it('delivers a message the phone sent while the gateway was down', async () => {
+    const onMessage = jest.fn();
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessage, onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+    fakeSock.fire('messages.upsert', {
+      type: 'append',
+      messages: [
+        {
+          key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'TYPED_ON_PHONE' },
+          message: { conversation: 'replied from the phone during the outage' },
+          messageTimestamp: Math.floor(Date.now() / 1000) - 3600,
+        },
+      ],
+    });
+    await new Promise(r => setImmediate(r));
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+  });
+
+  // WhatsApp re-delivers a node whose ack was lost on a socket drop. The inbound path is deduped by
+  // the session's insert oracle, but the own-send path dispatches message.sent whatever the insert
+  // did, so a phone-sent message delivered twice has to be caught before it leaves the adapter. The
+  // store already holds everything this session delivered or sent, and it survives a restart.
+  it('does not dispatch a phone-sent message twice when WhatsApp re-delivers it', async () => {
+    const replayed = {
+      key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'TYPED_ON_PHONE' },
+      message: { conversation: 'replied from the phone during the outage' },
+      messageTimestamp: Math.floor(Date.now() / 1000) - 3600,
+    };
+    fakeStore.getMessage.mockResolvedValueOnce(null).mockResolvedValueOnce(replayed);
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+
+    fakeSock.fire('messages.upsert', { type: 'append', messages: [replayed] });
+    await new Promise(r => setImmediate(r));
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+
+    fakeSock.fire('messages.upsert', { type: 'append', messages: [replayed] }); // the unacked re-delivery
+    await new Promise(r => setImmediate(r));
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+  });
+
+  // A story is not a conversation: the projector drops an own status post rather than reporting it,
+  // so downloading its media first is work nothing consumes, and a story is a full-size photo.
+  it('does not download the media of a status the account posted from its phone', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const baileys = jest.requireMock('@whiskeysockets/baileys') as {
+      getContentType: jest.Mock;
+      downloadMediaMessage: jest.Mock;
+    };
+    baileys.getContentType.mockReturnValue('imageMessage');
+    baileys.downloadMediaMessage.mockClear();
+
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+
+    fakeSock.fire('messages.upsert', {
+      type: 'append',
+      messages: [
+        {
+          key: { remoteJid: 'status@broadcast', fromMe: true, id: 'OWN_STATUS_1' },
+          message: { imageMessage: { mimetype: 'image/jpeg', caption: 'from the phone' } },
+          messageTimestamp: Math.floor(Date.now() / 1000) - 60,
+        },
+      ],
+    });
+    await new Promise(r => setImmediate(r));
+
+    expect(baileys.downloadMediaMessage).not.toHaveBeenCalled();
+    // Still reported, so nothing downstream changes: only the download is skipped.
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
+  });
+
+  // A store that cannot answer must not be read as "this was never sent": the only other outcome is
+  // the handler's catch, which drops the message, and Baileys acks the node before emitting it, so
+  // WhatsApp never sends it again. Fail open, and take the duplicate risk instead of the loss.
+  it('still delivers a phone-sent message when the message store read fails', async () => {
+    fakeStore.getMessage.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'));
+    const onMessageCreate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize({ onMessageCreate });
+    fakeSock.fire('connection.update', { connection: 'open' });
+
+    fakeSock.fire('messages.upsert', {
+      type: 'append',
+      messages: [
+        {
+          key: { remoteJid: '628111@s.whatsapp.net', fromMe: true, id: 'TYPED_WHILE_DB_BUSY' },
+          message: { conversation: 'sent from the phone while the database was locked' },
+          messageTimestamp: Math.floor(Date.now() / 1000) - 60,
+        },
+      ],
+    });
+    await new Promise(r => setImmediate(r));
+
+    expect(onMessageCreate).toHaveBeenCalledTimes(1);
   });
 
   it('emits onMessageAck from messages.update with a neutral status', async () => {
@@ -3361,6 +3519,11 @@ describe('BaileysAdapter store-backed ops', () => {
   const ownStored = {
     key: { id: 'TARGET', remoteJid: '628111@s.whatsapp.net', fromMe: true },
     message: { conversation: 'hi' },
+    // A STRING, which is what the store gives back: Baileys decodes `messageTimestamp` as a Long, and
+    // a Long serializes to its decimal string, so the JSON round trip through `baileys_messages` never
+    // returns the number the proto type advertises. Also distinct from the edit envelope's send time
+    // below, so a spec cannot pass on either one.
+    messageTimestamp: '1700000000',
   };
 
   it('replyToMessage quotes the stored message', async () => {
@@ -3553,7 +3716,8 @@ describe('BaileysAdapter store-backed ops', () => {
   });
 
   it('deleteMessage for-me (forEveryone=false) deletes via chatModify({ deleteForMe })', async () => {
-    fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: 1700000007 });
+    // The stored timestamp is a STRING, which is the only shape the store returns: see toUnixSeconds.
+    fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: '1700000007' });
     const adapter = await ready();
     await adapter.deleteMessage('628111@s.whatsapp.net', 'TARGET', false);
     expect(fakeSock.chatModify).toHaveBeenCalledWith(
@@ -3562,6 +3726,21 @@ describe('BaileysAdapter store-backed ops', () => {
     );
     expect(fakeSock.sendMessage).not.toHaveBeenCalled();
   });
+
+  it.each([['not-a-number'], [Number.NaN], [Number.POSITIVE_INFINITY]])(
+    'deleteMessage for-me sends a usable timestamp when the stored one is %p',
+    async unusable => {
+      // A row written by an older build, or hand-edited. Anything non-finite would be built into
+      // the chatModify payload; Baileys encodes that timestamp into the app-state patch, so it is
+      // the request itself that is malformed, and nothing downstream can do arithmetic on it.
+      fakeStore.getMessage.mockResolvedValue({ ...stored, messageTimestamp: unusable });
+      const adapter = await ready();
+      await adapter.deleteMessage('628111@s.whatsapp.net', 'TARGET', false);
+      const [payload] = fakeSock.chatModify.mock.calls[0] as [{ deleteForMe: { timestamp: number } }];
+      expect(Number.isFinite(payload.deleteForMe.timestamp)).toBe(true);
+      expect(payload.deleteForMe.timestamp).toBeGreaterThan(1_600_000_000);
+    },
+  );
 
   it('editMessage re-applies participant tags to the new body', async () => {
     // An edit REPLACES the content, so a body that still reads "@62811" needs the tag list resent or
@@ -3584,7 +3763,13 @@ describe('BaileysAdapter store-backed ops', () => {
 
   it('editMessage edits via the stored key and returns the (unchanged) message id', async () => {
     fakeStore.getMessage.mockResolvedValue(ownStored);
-    fakeSock.sendMessage.mockResolvedValue({ key: { ...ownStored.key }, messageTimestamp: 1700000010 });
+    // The library answers with the protocol envelope that carried the edit, which has an id AND a
+    // send time of its own; the edited message keeps both of the caller's. A mock echoing the
+    // target's values back would pass whichever of the two the adapter returned.
+    fakeSock.sendMessage.mockResolvedValue({
+      key: { ...ownStored.key, id: '3EB0FRESHENVELOPE' },
+      messageTimestamp: 1700000010,
+    });
     const adapter = await ready();
     const res = await adapter.editMessage('628111@s.whatsapp.net', 'TARGET', 'edited body');
     expect(fakeSock.sendMessage).toHaveBeenCalledWith(
@@ -3596,15 +3781,15 @@ describe('BaileysAdapter store-backed ops', () => {
       },
       expect.objectContaining({ getUrlInfo: expect.any(Function) as unknown }) as unknown,
     );
-    expect(res).toEqual({ id: 'TARGET', timestamp: 1700000010 });
+    expect(res).toEqual({ id: 'TARGET', timestamp: 1700000000 });
   });
 
-  it('editMessage falls back to the requested id when the send echoes nothing back', async () => {
+  it('editMessage answers from the stored message even when the send echoes nothing back', async () => {
     fakeStore.getMessage.mockResolvedValue(ownStored);
     fakeSock.sendMessage.mockResolvedValue(undefined);
     const adapter = await ready();
     const res = await adapter.editMessage('628111@s.whatsapp.net', 'TARGET', 'edited body');
-    expect(res.id).toBe('TARGET');
+    expect(res).toEqual({ id: 'TARGET', timestamp: 1700000000 });
   });
 
   it('editMessage throws MessageNotFoundError when the message is not in the store', async () => {
@@ -4581,6 +4766,19 @@ describe('BaileysAdapter group events (group-participants.update / groups.update
     expect(firstEvent(onGroupEvent).groupId).toBe('789-000@g.us');
   });
 
+  it('skips a self-created group addressed by lid when the creds carry no own lid', async () => {
+    // Without `user.lid` every lid comparison answered false, so the group this session had just
+    // created was reported as a join of itself. The store's own lid mapping settles it instead.
+    fakeSock.user = { id: '628999:1@s.whatsapp.net', name: 'Me' }; // no lid on the creds
+    const { onGroupEvent } = await readyWithGroupEvents();
+    // The session learns its own lid from ordinary traffic, the same way every other mapping arrives.
+    fakeSock.fire('lid-mapping.update', { lid: '999000@lid', pn: '628999@s.whatsapp.net' });
+
+    fakeSock.fire('groups.upsert', [createdGroup({ author: '999000@lid', owner: '999000@lid', authorPn: undefined })]);
+
+    expect(onGroupEvent).not.toHaveBeenCalled();
+  });
+
   it('reports a groups.upsert entry the session authored for a group another account owns', async () => {
     fakeSock.user = { id: '628999:1@s.whatsapp.net', lid: '999000:1@lid', name: 'Me' };
     const { onGroupEvent } = await readyWithGroupEvents();
@@ -4909,13 +5107,23 @@ describe('BaileysAdapter contact + chat reads', () => {
 
   it('populates contacts from contacts.upsert and reads them', async () => {
     const adapter = await ready();
-    fakeSock.fire('contacts.upsert', [{ id: '628111@s.whatsapp.net', notify: 'Al' }]);
+    fakeSock.fire('contacts.upsert', [{ id: '628111@s.whatsapp.net', name: 'Al', notify: 'Al' }]);
     const contacts = await adapter.getContacts();
     expect(contacts).toHaveLength(1);
-    expect(contacts[0]).toMatchObject({ id: '628111@c.us', pushName: 'Al', number: '628111' });
+    expect(contacts[0]).toMatchObject({ id: '628111@c.us', name: 'Al', pushName: 'Al', number: '628111' });
     expect((await adapter.getContactById('628111@s.whatsapp.net'))?.number).toBe('628111');
     expect((await adapter.getContactById('628111@c.us'))?.id).toBe('628111@c.us'); // neutral id round-trips
     expect(await adapter.getContactById('x@s.whatsapp.net')).toBeNull();
+  });
+
+  it('does not list a pushname-only peer on GET /contacts (address book only)', async () => {
+    const adapter = await ready();
+    fakeSock.fire('contacts.upsert', [{ id: '628111@s.whatsapp.net', notify: 'Al' }]);
+    await expect(adapter.getContacts()).resolves.toHaveLength(0);
+    await expect(adapter.getContactById('628111@c.us')).resolves.toMatchObject({
+      pushName: 'Al',
+      isMyContact: false,
+    });
   });
 
   it('populates chats + last message and reads getChats', async () => {
@@ -4955,9 +5163,13 @@ describe('BaileysAdapter contact + chat reads', () => {
       messages: [],
       lidPnMappings: [{ lid: '111@lid', pn: '628999@s.whatsapp.net' }],
     });
-    expect(await adapter.getContacts()).toHaveLength(1);
+    expect(await adapter.getContacts()).toHaveLength(0);
     expect(await adapter.resolveContactPhone('111@lid')).toBe('628999');
     expect(await adapter.resolveContactPhone('628222@s.whatsapp.net')).toBe('628222');
+    expect(await adapter.getContactById('628222@c.us')).toMatchObject({
+      pushName: 'Bob',
+      isMyContact: false,
+    });
   });
 
   it('contact/chat reads reject with EngineNotReadyError before connect', async () => {
