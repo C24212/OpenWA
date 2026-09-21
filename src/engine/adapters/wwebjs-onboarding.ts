@@ -11,9 +11,9 @@ export const ONBOARDING_DEFAULT_CONTINUE_LABEL = 'Continue';
  * English, comma-separated (`WWEBJS_ONBOARDING_CONTINUE_LABELS=Continuar,Weiter`).
  *
  * Needed because the match is on visible text and WhatsApp controls those strings; we are not going
- * to carry its translation table. Read per probe, not cached, so a change made through the infra
- * config reaches a watcher that is still running. The watcher only runs for the first minutes after
- * ready, so a label added later takes effect on the next session start.
+ * to carry its translation table. The value comes from the environment loaded at boot, so a label
+ * added later takes effect only after OpenWA itself restarts; stopping and starting a session is not
+ * enough.
  *
  * Supplying labels also drops the heading requirement for THOSE labels: the English heading regex
  * would reject a localised modal anyway, so requiring both would make the setting useless. That is a
@@ -333,7 +333,7 @@ export class WwebjsOnboardingWatcher {
             this.host.logger.warn(
               'A visible dialog on WhatsApp Web matches neither the onboarding-modal heading nor a ' +
                 'confirm-button label. If this is the onboarding screen in another language, add its ' +
-                'confirm-button label to WWEBJS_ONBOARDING_CONTINUE_LABELS and restart the session; on a ' +
+                'confirm-button label to WWEBJS_ONBOARDING_CONTINUE_LABELS and restart OpenWA; on a ' +
                 'newly linked account WhatsApp unlinks the companion within minutes while it stays open. ' +
                 'An English onboarding screen that is not recognised is worth reporting.',
               {

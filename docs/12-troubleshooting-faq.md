@@ -280,7 +280,8 @@ change will come from the engine libraries implementing the step.
 
 **Cause:** the pairing request carries the linked-device identity, and some accounts reject a
 non-standard one. The default device name is `OpenWA`; set `BAILEYS_BROWSER_NAME=Ubuntu` (or another
-standard OS name), restart the session, and request a fresh code. The name applies to new pairings only;
+standard OS name), restart OpenWA itself (the name is read at boot, so stopping and starting the session
+is not enough), and request a fresh code. The name applies to new pairings only;
 a session that is already linked keeps the name it was paired with until it is re-linked. See the
 phone-number pairing example in `docs/examples/session-phone-number-pairing.md`.
 
@@ -557,8 +558,9 @@ once, so the session stops instead of being silently unlinked by WhatsApp about 
 > (`Continue`) under the English heading ("What's new"). OpenWA appends `--lang=en-US` to the browser
 > flags unless `PUPPETEER_ARGS` already carries a `--lang`, but that sets the browser's language, and
 > WhatsApp Web may still render in the account's own language. For another language, add the modal's
-> confirm-button label to `WWEBJS_ONBOARDING_CONTINUE_LABELS` (for example `Continuar`) and restart the
-> session: the watcher runs only for the first minutes after `ready`. A configured label is clicked
+> confirm-button label to `WWEBJS_ONBOARDING_CONTINUE_LABELS` (for example `Continuar`) and restart
+> OpenWA itself: the value is read at boot, so stopping and starting the session is not enough. A
+> configured label is clicked
 > without the English heading check, but only on a button inside a visible dialog. If your deployment gets a
 > localised modal without a matching label, it is **not** auto-dismissed and the session never reaches
 > `action_required`; instead it links normally, then drops to `disconnected` with reason `LOGOUT` a few

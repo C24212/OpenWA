@@ -75,7 +75,8 @@ export const PINNED_BROWSER_LOCALE = 'en-US';
  * Append the locale pin unless the operator already set one. Deliberately applied AFTER the
  * PUPPETEER_ARGS override rather than baked into the default string: that variable REPLACES the
  * defaults, so a deployment that customises args for an unrelated reason would otherwise silently
- * lose the pin and the onboarding detector with it. An explicit `--lang` always wins.
+ * lose the pin and fall back to the binary's default browser language. An explicit `--lang` always
+ * wins.
  *
  * Returns a NEW array — never mutates the input — because the resolved args object is shared by every
  * session, and pushing per-session flags onto a shared array leaked proxy settings across sessions
