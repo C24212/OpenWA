@@ -295,6 +295,8 @@ export interface ChatMessage {
     quotedMessage?: { id: string; body: string };
     reactions?: Record<string, string>;
     call?: { video: boolean; missed: boolean };
+    /** Business prompt choices (Baileys). Present on inbound prompts that offer buttons. */
+    buttons?: Array<{ id: string; text: string }>;
   };
 }
 
@@ -323,8 +325,8 @@ export interface EngineHistoryMessage {
   isLidSender?: boolean;
   senderPhone?: string | null;
   /**
-   * Sender contact info, best-effort from the engine's cache. History carries `pushName` only;
-   * the richer fields arrive on `message.received` when `WEBHOOK_CONTACT_DETAILS=true`.
+   * Sender contact info, best-effort from the engine's cache. History carries `name` and `pushName`;
+   * the richer fields are added when `WEBHOOK_CONTACT_DETAILS=true`, as on `message.received`.
    */
   contact?: {
     id?: string;
@@ -1073,6 +1075,15 @@ export const messageApi = {
     }),
   reply: (sessionId: string, data: { chatId: string; quotedMessageId: string; text: string }) =>
     request<MessageResponse>(`/sessions/${sessionId}/messages/reply`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  /**
+   * Tap a choice on an inbound business button/list prompt (Baileys only).
+   * `messageId` is the prompt's WhatsApp id; `buttonId` is `buttons[].id`.
+   */
+  clickButton: (sessionId: string, data: { chatId: string; messageId: string; buttonId: string; text?: string }) =>
+    request<MessageResponse>(`/sessions/${sessionId}/messages/click-button`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),

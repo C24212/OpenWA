@@ -165,6 +165,7 @@ export function Sessions() {
     handleCloseQRModal,
     applyQrPush,
     dismissQrForSession,
+    clearQrCodeForSession,
   } = useSessionPairing({ sessions, sessionsRef, reloadSessions: fetchSessions });
 
   const {
@@ -250,10 +251,17 @@ export function Sessions() {
           // that means two different things — an engine still registered through its automatic
           // reconnect backoff, or a session stopped with no engine at all — and only the server can
           // say which, so the offered actions must not be guessed from the status here.
-          // The same answer decides whether an open QR modal for it can still show a code.
+          // The same answer decides whether an open QR modal for it can be closed outright.
+          // Either way the code on screen was minted by a connection that is now gone, so blank it
+          // first: scanning it cannot work, and the modal shows its loading state until the session
+          // is back at `qr_ready` with a fresh one.
+          clearQrCodeForSession(event.sessionId);
           void fetchSessions().then(rows => {
             if (rows.find(s => s.id === event.sessionId)?.engineLoaded === false) {
-              dismissQrForSession(event.sessionId);
+              // Only if nothing arrived while the answer was in flight: a reconnect that completed
+              // in that window has already pushed a fresh code into the modal blanked above, and
+              // that code is scannable.
+              dismissQrForSession(event.sessionId, true);
             }
           });
           toast.warning(t('sessions.toasts.disconnectedTitle'), t('sessions.toasts.disconnectedDesc'));
@@ -269,7 +277,7 @@ export function Sessions() {
           toast.error(t('sessions.toasts.failedTitle'), t('sessions.toasts.failedDesc'));
         }
       },
-      [toast, t, fetchSessions, queryClient, dismissQrForSession],
+      [toast, t, fetchSessions, queryClient, dismissQrForSession, clearQrCodeForSession],
     ),
   });
 
@@ -335,6 +343,11 @@ export function Sessions() {
       // retires the start, and an engine can fail right after answering. Skip the modal when the re-read
       // shows the session without one. A failed re-read gives no answer, so the start's success decides.
       const row = (await fetchSessions()).find(s => s.id === id);
+      // A session that came back already linked has nothing to scan. Decided from the re-read rather
+      // than left to handleShowQR's own guard, which reads the sessions state this render still
+      // holds: that state predates both the start response and the re-read, so it would let the
+      // modal open over a connected session and then poll for a QR that can never arrive.
+      if (row?.status === 'ready') return;
       if (!row || isSessionStarted(row)) handleShowQR(id);
     } catch (err) {
       console.error('Failed to start:', err);
@@ -770,6 +783,11 @@ export function Sessions() {
               // Pairing Code Content
               <div className="pairing-container" role="tabpanel">
                 {pairingError && <div className="pairing-error">{pairingError}</div>}
+                {/* The guards behind this button check the session's state, never the number: a code
+                    requested for a number linked elsewhere has been seen to unlink that device on the
+                    whatsapp-web.js engine. Shown on both engines, since the page cannot tell which one
+                    a session runs without another round-trip, and the copy names the engine. */}
+                <div className="pairing-warning">{t('sessions.pairing.relinkWarning')}</div>
 
                 {!pairingCode ? (
                   <div className="pairing-form">

@@ -17,6 +17,7 @@ import {
 } from '../interfaces/whatsapp-engine.interface';
 import { toEngineParticipants } from './baileys-groups';
 import { buildVCard } from './vcard';
+import { resolveBaileysButtonClick } from './baileys-message-mapper';
 import { loadRemoteMediaBuffer } from '../../common/media/load-remote-media';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { EngineRefusedError } from '../../common/errors/engine-refused.error';
@@ -43,11 +44,13 @@ export interface BaileysMessagingHost {
   /** The chat's cached disappearing-messages timer (#473), or undefined when none is known. */
   getEphemeralExpiration(chatId: string): number | undefined;
   /** Baileys timestamps are `number | Long`; normalize to unix seconds. */
-  toUnixSeconds(ts: number | { toNumber(): number } | null | undefined): number;
+  toUnixSeconds(ts: number | string | { toNumber(): number } | null | undefined): number;
   /** Lazily loaded @whiskeysockets/baileys module (ESM-only; loaded on first connect, not at boot). */
   loadLib(): Promise<typeof BaileysLib>;
   /** Persist a just-sent message to the store; undefined when no store is configured. */
   putStoredMessage(msg: WAMessage): Promise<void> | undefined;
+  /** Record the id of a message this session just sent, so its library echo is recognised as ours. */
+  rememberOwnSend(id: string | null | undefined): void;
   /** Look up a previously-seen message from the store (the reply/forward/react/delete handle). */
   getStoredMessage(messageId: string): Promise<WAMessage | null> | undefined;
   /** Remember a lid<->phone pair the socket resolved, so later reads do not have to ask again. */
@@ -220,7 +223,7 @@ export class BaileysMessaging {
           }
         : {}),
     };
-    const sent = await this.sock().sendMessage(jid, content, options);
+    const sent = await this.send(jid, content, options);
     if (sent) {
       void this.host.putStoredMessage(sent)?.catch(err =>
         this.host.logger.warn('Failed to persist sent message to store', {
@@ -475,6 +478,39 @@ export class BaileysMessaging {
     return this.sendContent(chatId, { text, ...this.withMentions(mentions) }, { quoted });
   }
 
+  /**
+   * Send a structured button/list reply against a stored business prompt.
+   *
+   * Classic prompts (`buttonsMessage` / `templateMessage` / `listMessage`) go through Baileys'
+   * `buttonReply` / `listReply` helpers via {@link sendContent}, so the send inherits
+   * `withEphemeral`, the store put and the own-send echo. Native-flow `interactiveMessage` has no
+   * helper; it uses the template `buttonReply` shape, which is unverified against a live business
+   * native-flow prompt.
+   */
+  async clickButton(chatId: string, messageId: string, buttonId: string, text?: string): Promise<MessageResult> {
+    this.host.ensureReady();
+    const quoted = await this.requireStored(messageId);
+    this.assertStoredInChat(quoted, chatId, messageId);
+
+    const b = await this.host.loadLib();
+    const normalized = b.normalizeMessageContent(quoted.message ?? undefined) ?? quoted.message ?? {};
+    const contentType = b.getContentType(normalized);
+    const resolved = resolveBaileysButtonClick(normalized, contentType, buttonId, text);
+    if (!resolved.ok) {
+      if (resolved.error === 'unknown_button') {
+        throw new BadRequestException(
+          `buttonId "${buttonId}" is not among the clickable choices on message ${messageId}`,
+        );
+      }
+      throw new BadRequestException(
+        `message ${messageId} is not a WhatsApp Business button/list prompt that can be clicked`,
+      );
+    }
+
+    const result = await this.sendContent(chatId, resolved.payload.content as AnyMessageContent, { quoted });
+    return { ...result, body: resolved.payload.text };
+  }
+
   async forwardMessage(fromChatId: string, toChatId: string, messageId: string): Promise<MessageResult> {
     this.host.ensureReady();
     const forward = await this.requireStored(messageId);
@@ -490,7 +526,7 @@ export class BaileysMessaging {
     const target = await this.requireStored(messageId);
     this.assertStoredInChat(target, chatId, messageId);
     // Resolved like any other send: a lid-migrated contact rejects PN-addressed sends (ack 463).
-    await this.sock().sendMessage(await this.toDeliverableJid(chatId), { react: { text: emoji, key: target.key } });
+    await this.send(await this.toDeliverableJid(chatId), { react: { text: emoji, key: target.key } });
   }
 
   async deleteMessage(chatId: string, messageId: string, forEveryone = true): Promise<void> {
@@ -498,7 +534,7 @@ export class BaileysMessaging {
     const target = await this.requireStored(messageId);
     this.assertStoredInChat(target, chatId, messageId);
     if (forEveryone) {
-      await this.sock().sendMessage(await this.toDeliverableJid(chatId), { delete: target.key });
+      await this.send(await this.toDeliverableJid(chatId), { delete: target.key });
       return;
     }
     // Delete-for-me (revoke on this device only): Baileys exposes it as a chat modification, not a
@@ -540,12 +576,13 @@ export class BaileysMessaging {
     // protocolMessage edit envelope, so an edit can re-tag participants. An edit REPLACES the
     // content, so omitting mentions drops whatever tags the original carried.
     const editContent = { text: body, ...this.withMentions(mentions), edit: target.key };
-    const sent = await this.sock().sendMessage(
-      jid,
-      this.previewSafe(editContent),
-      this.previewSafeOptions(editContent),
-    );
-    return { id: sent?.key?.id ?? messageId, timestamp: this.host.toUnixSeconds(sent?.messageTimestamp) };
+    await this.send(jid, this.previewSafe(editContent), this.previewSafeOptions(editContent));
+    // Both fields describe the EDITED MESSAGE, not the protocol envelope that carried the edit.
+    // That envelope has an id and a send time of its own; answering with either would name something
+    // no route can address and no stored row is keyed by, and would disagree with the
+    // whatsapp-web.js engine, which re-reads the message and reports the original of both. An edit
+    // does not move a message in the chat, so its timestamp is still the one it was sent at.
+    return { id: messageId, timestamp: this.host.toUnixSeconds(target.messageTimestamp) };
   }
 
   /**
@@ -641,7 +678,7 @@ export class BaileysMessaging {
     const jid = await this.toDeliverableJid(chatId);
     const safe = this.previewSafe(content);
     const merged = this.previewSafeOptions(safe, this.withEphemeral(jid, options));
-    const sent = merged ? await this.sock().sendMessage(jid, safe, merged) : await this.sock().sendMessage(jid, safe);
+    const sent = await this.send(jid, safe, merged);
     if (sent) {
       void this.host.putStoredMessage(sent)?.catch(err =>
         this.host.logger.warn('Failed to persist sent message to store', {
@@ -649,13 +686,33 @@ export class BaileysMessaging {
         }),
       );
       // wwjs fires `message_create` for its own API sends, which SessionService turns into `message.sent`.
-      // Baileys' own socket-sends echo back only as a `type:'append'` upsert (skipped as history sync), so
-      // that event never fired for API sends. Emit the outbound "created" callback here for parity —
-      // best-effort and off the response path. No media re-download: the API caller already holds the
+      // Baileys' own socket-sends echo back only as a `type:'append'` upsert, which handleMessagesUpsert
+      // skips by the id send() recorded, so that event never fired for API sends. Emit the outbound
+      // "created" callback here for parity: best-effort,
+      // and off the response path. No media re-download: the API caller already holds the
       // payload and the REST send path persists it (wwjs, by contrast, does download it on its echo).
       void this.emitOwnSendEcho(sent);
     }
     return { id: sent?.key?.id ?? '', timestamp: this.host.toUnixSeconds(sent?.messageTimestamp) };
+  }
+
+  /**
+   * Every message this delegate sends goes through here so its id is recorded before the library
+   * echoes it back. Baileys re-emits each own send through `messages.upsert` tagged `append`, the
+   * same tag WhatsApp uses to replay what the account typed on its phone while the gateway was
+   * down, and the id is the only thing that tells the two apart (see handleMessagesUpsert). The
+   * record is synchronous on the send's own continuation, ahead of the library's buffered echo.
+   */
+  private async send(
+    jid: string,
+    content: Parameters<WASocket['sendMessage']>[1],
+    options?: Parameters<WASocket['sendMessage']>[2],
+  ): Promise<WAMessage | undefined> {
+    const sent = options
+      ? await this.sock().sendMessage(jid, content, options)
+      : await this.sock().sendMessage(jid, content);
+    this.host.rememberOwnSend(sent?.key?.id);
+    return sent;
   }
 
   /**
@@ -745,7 +802,7 @@ export class BaileysMessaging {
     // pure ESM and every other site in this codebase defers it to first connect; a module-scope
     // require would drag ~590 modules into boot even for whatsapp-web.js-only processes.
     const { proto } = await this.host.loadLib();
-    await this.sock().sendMessage(await this.toDeliverableJid(chatId), {
+    await this.send(await this.toDeliverableJid(chatId), {
       pin: target.key,
       type: proto.PinInChat.Type.PIN_FOR_ALL,
       // WhatsApp recognises only these three windows; the DTO rejects anything else before we
@@ -760,7 +817,7 @@ export class BaileysMessaging {
     this.assertStoredInChat(target, chatId, messageId);
     const { proto } = await this.host.loadLib();
     // `time` is meaningless for an unpin and is omitted rather than sent as a dummy value.
-    await this.sock().sendMessage(await this.toDeliverableJid(chatId), {
+    await this.send(await this.toDeliverableJid(chatId), {
       pin: target.key,
       type: proto.PinInChat.Type.UNPIN_FOR_ALL,
     });
