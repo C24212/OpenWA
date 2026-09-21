@@ -609,3 +609,11 @@
     padding: 0.625rem 0.75rem;
   }
 }
+
+/* Wraps the composer so a running multi-group send can lock every field at once. */
+.message-tester .composer-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}

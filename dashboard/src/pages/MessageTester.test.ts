@@ -134,11 +134,17 @@ test('cancelling a group send stops the groups still waiting', async () => {
   await sendTextToAllGroups();
 
   await rtl.waitFor(() => assert.equal(gateway.textSends.length, 1));
+  // The run sends what was on screen when it started, so the composer is locked while it runs.
+  assert.equal(window.document.getElementById('mt-2')?.matches(':disabled'), true);
   rtl.fireEvent.click(await rtl.screen.findByRole('button', { name: 'Cancel' }));
 
   await rtl.screen.findByText('1, cancelled');
   assert.deepEqual(gateway.textSends, ['g1@g.us']);
   assert.ok(rtl.screen.getByText('1/2 sent'));
+  // One of two groups sent is not a success.
+  assert.ok(rtl.screen.getByText('Failed'));
+  assert.equal(rtl.screen.queryByText('Success'), null);
+  assert.equal(window.document.getElementById('mt-2')?.matches(':disabled'), false);
 });
 
 test('a 429 from the gateway stops the run instead of trying the rest', async () => {
