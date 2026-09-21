@@ -7,6 +7,7 @@
   },
   "common": {
     "appName": "OpenWA",
+    "updateAvailable": "الإصدار v{{version}} متاح",
     "loading": "جارٍ التحميل...",
     "cancel": "إلغاء",
     "delete": "حذف",

@@ -7,6 +7,7 @@
   },
   "common": {
     "appName": "OpenWA",
+    "updateAvailable": "v{{version}} mevcut",
     "loading": "Yükleniyor...",
     "cancel": "İptal",
     "delete": "Sil",

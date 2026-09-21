@@ -7,6 +7,7 @@
   },
   "common": {
     "appName": "OpenWA",
+    "updateAvailable": "v{{version}} 사용 가능",
     "loading": "로딩 중...",
     "cancel": "취소",
     "delete": "삭제",
