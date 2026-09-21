@@ -707,6 +707,7 @@
     "bulkMediaTooLarge": "此文件太大，无法直接发送给 {{count}} 位接收者：在这个人数下，每个文件最大只能为 {{size}}。请改用公开的媒体 URL，或减少接收者数量。",
     "bulkMediaUrlInvalid": "请输入以 http:// 或 https:// 开头的完整地址，例如 https://example.com/file.pdf。",
     "bulkCaptionTooLong": "添加附件后，消息将作为附件的说明文字发送，说明文字最多 {{max}} 个字符（当前 {{count}} 个）。",
+    "bulkAudioNoCaption": "音频发送时不带说明文字，因此这段文字不会被发送。请清空消息或选择其他类型。",
     "send": "发送消息",
     "sending": "正在发送...",
     "viewOnly": "仅查看",

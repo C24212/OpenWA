@@ -707,6 +707,7 @@
     "bulkMediaTooLarge": "Ce fichier est trop volumineux pour être envoyé directement à {{count}} destinataires : à ce nombre, chaque fichier peut faire au maximum {{size}}. Utilisez plutôt une URL de média publique ou envoyez à moins de destinataires.",
     "bulkMediaUrlInvalid": "Saisissez une adresse complète en http:// ou https://, par exemple https://example.com/file.pdf.",
     "bulkCaptionTooLong": "Avec une pièce jointe, le message est envoyé comme sa légende, limitée à {{max}} caractères ({{count}} actuellement).",
+    "bulkAudioNoCaption": "L'audio est envoyé sans légende, ce texte ne serait donc pas envoyé. Videz le message ou choisissez un autre type.",
     "send": "Envoyer le message",
     "sending": "Envoi...",
     "viewOnly": "Lecture seule",

@@ -34,13 +34,26 @@ const KIND_BY_EXTENSION: Record<string, BulkMediaKind> = {
   wav: 'audio',
 };
 
+// The server treats a media string as a URL only when it starts with http:// or https:// and decodes
+// anything else as base64. A URL parser alone repairs `https:/host/a.pdf` or `https:host/a.pdf`, so the
+// raw string has to carry the prefix too, or those typos go out as a file of garbage bytes.
 export function isHttpMediaUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
   try {
-    const { protocol } = new URL(url.trim());
+    const { protocol } = new URL(trimmed);
     return protocol === 'http:' || protocol === 'https:';
   } catch {
     return false;
   }
+}
+
+// Caption length the way the server's @MaxLength counts it (validator.js isLength): a surrogate pair
+// is one character and a variation selector is none, so an emoji does not count twice.
+export function captionLength(text: string): number {
+  const surrogatePairs = text.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g)?.length ?? 0;
+  const presentationSequences = text.match(/[^️︎][️︎]/g)?.length ?? 0;
+  return text.length - presentationSequences - surrogatePairs;
 }
 
 export function inlineMediaBudgetBytes(recipientCount: number): number {

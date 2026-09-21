@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildBulkMessages,
+  captionLength,
   filenameFromUrl,
   formatFileSize,
   inlineMediaBudgetBytes,
@@ -49,6 +50,16 @@ test('only http and https URLs count as media URLs', () => {
   assert.equal(isHttpMediaUrl('file:///etc/passwd'), false);
   assert.equal(isHttpMediaUrl('data:application/pdf;base64,QUJD'), false);
   assert.equal(isHttpMediaUrl('ftp://cdn.example.com/a.pdf'), false);
+  // A URL parser repairs these, but the server would decode them as base64.
+  assert.equal(isHttpMediaUrl('https:/cdn.example.com/a.pdf'), false);
+  assert.equal(isHttpMediaUrl('https:cdn.example.com/a.pdf'), false);
+  assert.equal(isHttpMediaUrl('http:\\\\cdn.example.com\\a.pdf'), false);
+});
+
+test('counts a caption the way the server does, one per emoji', () => {
+  assert.equal(captionLength('hello'), 5);
+  assert.equal(captionLength('🎉🔥'), 2);
+  assert.equal(captionLength('❤️'), 1);
 });
 
 test('a URL that is not http(s) gives no attachment', () => {

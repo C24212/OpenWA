@@ -195,7 +195,9 @@ test('a media URL without http(s) keeps Send disabled', async () => {
   stubGateway();
   const container = await renderBulkAsWriter();
   type(container, '#mt-11', '15550000001');
-  type(container, '#mt-3', 'cdn.example.com/pricelist.pdf');
+  // With text present the form is otherwise valid, so only the URL guard can hold Send.
+  type(container, '#mt-12', 'Price list attached');
+  type(container, '#mt-3', 'https:/cdn.example.com/pricelist.pdf');
 
   await rtl.screen.findByText('Use a full http:// or https:// address, like https://example.com/file.pdf.');
   assert.equal(sendButton().disabled, true);
@@ -214,6 +216,19 @@ test('attaching a file holds the message to the caption limit', async () => {
   type(container, '#mt-3', 'https://cdn.example.com/logo.png');
 
   await rtl.screen.findByText(/limited to 1024 characters \(1025 now\)/);
+  assert.equal(sendButton().disabled, true);
+});
+
+test('text next to an audio attachment keeps Send disabled, since audio carries no caption', async () => {
+  stubGateway();
+  const container = await renderBulkAsWriter();
+  type(container, '#mt-11', '15550000001');
+  type(container, '#mt-3', 'https://cdn.example.com/jingle.mp3');
+  await rtl.waitFor(() => assert.equal(sendButton().disabled, false));
+
+  type(container, '#mt-12', 'Listen to our new jingle');
+
+  await rtl.screen.findByText(/Audio goes out without a caption/);
   assert.equal(sendButton().disabled, true);
 });
 

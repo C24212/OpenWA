@@ -18,6 +18,7 @@ import {
   BULK_INLINE_MEDIA_MAX_BYTES,
   BULK_MEDIA_KINDS,
   buildBulkMessages,
+  captionLength,
   formatFileSize,
   inlineMediaBudgetBytes,
   isHttpMediaUrl,
@@ -297,7 +298,11 @@ export function MessageTester() {
     mediaFile.base64.length * bulkRecipientList.length > BULK_INLINE_MEDIA_MAX_BYTES;
   const bulkMediaUrlInvalid =
     messageType === 'bulk' && !mediaFile && mediaUrl.trim() !== '' && !isHttpMediaUrl(mediaUrl);
-  const bulkCaptionTooLong = bulkAttachment !== null && content.length > BULK_CAPTION_MAX_LENGTH;
+  // Audio goes out without a caption (the bulk service does not forward one), so text next to an audio
+  // attachment would be dropped while the batch reports success. Refuse it instead of sending half.
+  const bulkAudioWithText = bulkAttachment?.kind === 'audio' && content.trim().length > 0;
+  const bulkCaptionTooLong =
+    bulkAttachment !== null && bulkAttachment.kind !== 'audio' && captionLength(content) > BULK_CAPTION_MAX_LENGTH;
 
   // Per-type required-field validation for the newer types; text/media keep their original behavior
   // (the backend stays the authoritative validator either way).
@@ -317,6 +322,7 @@ export function MessageTester() {
       (content.trim().length > 0 || bulkAttachment !== null) &&
       !bulkMediaTooLarge &&
       !bulkMediaUrlInvalid &&
+      !bulkAudioWithText &&
       !bulkCaptionTooLong &&
       bulkRecipientList.length > 0 &&
       bulkRecipientList.length <= BULK_MAX_RECIPIENTS &&
@@ -942,9 +948,14 @@ export function MessageTester() {
                   rows={4}
                 />
                 <span className="hint error" role="status">
-                  {bulkCaptionTooLong
-                    ? t('messageTester.bulkCaptionTooLong', { max: BULK_CAPTION_MAX_LENGTH, count: content.length })
-                    : ''}
+                  {bulkAudioWithText
+                    ? t('messageTester.bulkAudioNoCaption')
+                    : bulkCaptionTooLong
+                      ? t('messageTester.bulkCaptionTooLong', {
+                          max: BULK_CAPTION_MAX_LENGTH,
+                          count: captionLength(content),
+                        })
+                      : ''}
                 </span>
               </div>
               {mediaSourceFields}

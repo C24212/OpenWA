@@ -707,6 +707,7 @@
     "bulkMediaTooLarge": "Diese Datei ist zu groß, um sie direkt an {{count}} Empfänger zu senden: Bei dieser Anzahl darf eine Datei höchstens {{size}} groß sein. Verwende stattdessen eine öffentliche Medien-URL oder sende an weniger Empfänger.",
     "bulkMediaUrlInvalid": "Gib eine vollständige http://- oder https://-Adresse ein, z. B. https://example.com/file.pdf.",
     "bulkCaptionTooLong": "Mit Anhang wird die Nachricht als dessen Bildunterschrift gesendet, die auf {{max}} Zeichen begrenzt ist (aktuell {{count}}).",
+    "bulkAudioNoCaption": "Audio wird ohne Bildunterschrift gesendet, dieser Text würde also nicht verschickt. Leere die Nachricht oder wähle eine andere Art.",
     "send": "Nachricht senden",
     "sending": "Wird gesendet...",
     "viewOnly": "Nur ansehen",

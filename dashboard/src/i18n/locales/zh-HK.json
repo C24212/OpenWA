@@ -707,6 +707,7 @@
     "bulkMediaTooLarge": "此檔案太大，無法直接傳送給 {{count}} 位收件人：以這個人數計，每個檔案最大只能為 {{size}}。請改用公開的媒體 URL，或減少收件人數目。",
     "bulkMediaUrlInvalid": "請輸入以 http:// 或 https:// 開頭的完整地址，例如 https://example.com/file.pdf。",
     "bulkCaptionTooLong": "加入附件後，訊息會作為附件的說明文字傳送，說明文字最多 {{max}} 個字元（目前 {{count}} 個）。",
+    "bulkAudioNoCaption": "音訊傳送時不附說明文字，因此這段文字不會被傳送。請清除訊息或選擇其他類型。",
     "send": "傳送訊息",
     "sending": "正在傳送...",
     "viewOnly": "僅檢視",

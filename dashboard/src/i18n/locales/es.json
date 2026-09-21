@@ -658,6 +658,7 @@
     "bulkMediaTooLarge": "Este archivo es demasiado grande para enviarlo directamente a {{count}} destinatarios: con esa cantidad, cada archivo puede ocupar como máximo {{size}}. Usa una URL de medios pública o envía a menos destinatarios.",
     "bulkMediaUrlInvalid": "Usa una dirección completa con http:// o https://, por ejemplo https://example.com/file.pdf.",
     "bulkCaptionTooLong": "Con un adjunto, el mensaje se envía como su pie de foto, que está limitado a {{max}} caracteres (ahora {{count}}).",
+    "bulkAudioNoCaption": "El audio se envía sin pie, así que este texto no se enviaría. Borra el mensaje o elige otro tipo.",
     "send": "Enviar mensaje",
     "sending": "Enviando...",
     "viewOnly": "Solo lectura",

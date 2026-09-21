@@ -707,6 +707,7 @@
     "bulkMediaTooLarge": "This file is too large to send inline to {{count}} recipients: at that count each file can be at most {{size}}. Use a public media URL instead, or send to fewer recipients.",
     "bulkMediaUrlInvalid": "Use a full http:// or https:// address, like https://example.com/file.pdf.",
     "bulkCaptionTooLong": "With an attachment the message goes out as its caption, which is limited to {{max}} characters ({{count}} now).",
+    "bulkAudioNoCaption": "Audio goes out without a caption, so this text would not be sent. Clear the message or pick another kind.",
     "send": "Send Message",
     "sending": "Sending...",
     "viewOnly": "View Only",
