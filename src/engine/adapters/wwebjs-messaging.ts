@@ -6,6 +6,7 @@ import {
   ContactCard,
   DeliveryStatus,
   MediaInput,
+  MessageContact,
   MessageReaction,
   MessageResult,
   PollInput,
@@ -707,6 +708,10 @@ export class WwebjsMessaging {
       : mediaMaxBytes === undefined
         ? chatHistoryMediaBudgetBytes()
         : ingestMediaBudgetBytes(mediaMaxBytes);
+    // Sender contacts resolved so far, keyed like Message.getContact() (`author || from`). Each lookup
+    // is a page round trip and a history page repeats the same few senders, so resolve each once; a
+    // failed lookup is remembered as undefined rather than retried for every later message.
+    const senderContacts = new Map<string, MessageContact | undefined>();
     for (const msg of messages) {
       if (signal?.aborted) {
         break;
@@ -727,17 +732,22 @@ export class WwebjsMessaging {
       // contacts (author-only, no saved name) shows no sender label at all in the chat view,
       // even though the live `message` event handler resolves one via getContact() for the
       // exact same message. Mirror that here so history and live rendering agree.
-      try {
-        const contact = await msg.getContact();
-        if (contact) {
-          const full = process.env.WEBHOOK_CONTACT_DETAILS === 'true';
-          const merged = { ...out.contact, ...mapContactFields(contact, full) };
-          if (Object.keys(merged).length > 0) {
-            out.contact = merged;
-          }
+      const senderId = msg.author || msg.from;
+      if (!senderContacts.has(senderId)) {
+        let resolved: MessageContact | undefined;
+        try {
+          const contact = await msg.getContact();
+          if (contact) resolved = mapContactFields(contact, process.env.WEBHOOK_CONTACT_DETAILS === 'true');
+        } catch (error) {
+          this.host.logger.warn(
+            `Failed to resolve contact for history message ${msg.id._serialized}: ${String(error)}`,
+          );
         }
-      } catch (error) {
-        this.host.logger.warn(`Failed to resolve contact for history message ${msg.id._serialized}: ${String(error)}`);
+        senderContacts.set(senderId, resolved);
+      }
+      const merged = { ...out.contact, ...senderContacts.get(senderId) };
+      if (Object.keys(merged).length > 0) {
+        out.contact = merged;
       }
       const call = extractWwebjsCall(msg);
       if (call) out.call = call;
