@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Baileys `listMessage`, `buttonsResponseMessage`, `templateButtonReplyMessage` and `listResponseMessage` now classify as `type: "text"` (they previously fell through to `unknown`). Consumers filtering on `type` will see those shapes as text. Thanks @gabrielmmoraes1999.
 - The PostgreSQL data connection is pinned to UTC: parameters bind as UTC, naive timestamps read back as UTC, every pooled connection sets its session `TimeZone`, and boot fails when the effective zone is not UTC year round.
 - Credentials on a `socks4://` session proxy are reported at session start as unauthenticatable: SOCKS4 sends the user name as the connect request's user id and drops the password.
+- whatsapp-web.js clicks a `WWEBJS_ONBOARDING_CONTINUE_LABELS` label only on a button inside a visible dialog. It matched any visible button with that exact text anywhere on the page, and every click counts toward the limit that moves a ready session to `action_required` ([#1679](https://github.com/rmyndharis/OpenWA/issues/1679)). Thanks @DavidgFernandes for the report.
 
 ### Fixed
 
@@ -77,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The dashboard disables a session's Start and Reconnect buttons while its start request is in flight.
 - whatsapp-web.js sessions no longer report a call rejection that did not stop the call: the call reject route answers `501` and `autoRejectCalls` logs a failed auto-reject.
 - A Baileys session added to or joining a group emits `group.join`, as whatsapp-web.js already did.
+- A send that fails inside the engine logs a warning carrying the session, chat, message id and the engine's error, where only Nest's generic `[ExceptionsHandler]` line recorded it before ([#1679](https://github.com/rmyndharis/OpenWA/issues/1679)). Thanks @DavidgFernandes for the report.
 
 ### Documentation
 
@@ -84,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The pairing-code route, the phone-pairing example and the dashboard's phone tab warn that on whatsapp-web.js a code requested for a number that already has a linked session can end with WhatsApp unlinking that device; the capability matrix records the measurement ([#1653](https://github.com/rmyndharis/OpenWA/issues/1653)).
 - The docs and the OpenAPI field descriptions scope `maxReconnectAttempts` and `reconnectBaseDelay` to the gateway's own reconnect: on Baileys that is only the reconnect after a logged-out close, since the engine retries every other drop itself, with a fixed 1s to 60s backoff and no attempt cap ([#1651](https://github.com/rmyndharis/OpenWA/issues/1651)).
 - The docs, the README, the OpenAPI field descriptions and the dashboard's auto-reject hint mark call rejection, `autoRejectCalls` and the call outcome events as Baileys only, and `call.received` as not reliable on whatsapp-web.js ([#1118](https://github.com/rmyndharis/OpenWA/discussions/1118)). Thanks @etondeengole for the report.
+- The FAQ, `.env.example` and the whatsapp-web.js unrecognised-dialog warning describe the onboarding-modal language correctly: `--lang=en-US` is appended automatically, WhatsApp Web can still render the modal in the account's language, and a label in `WWEBJS_ONBOARDING_CONTINUE_LABELS` plus a restart of OpenWA covers it ([#1679](https://github.com/rmyndharis/OpenWA/issues/1679)). Thanks @DavidgFernandes for the report.
+- The FAQ and the phone-pairing example say that `BAILEYS_BROWSER_NAME` takes effect after a restart of OpenWA, not of the session, since the name is read at boot ([#1666](https://github.com/rmyndharis/OpenWA/issues/1666)).
 
 ### Dependencies
 
@@ -104,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WebSocket command replies are pushed on the `message` event as well as returned through the ack callback. A client that passes an ack AND listens on `message` therefore sees each reply twice from this release; handle it in one place.
 - A caller-supplied URL leaves through the session proxy from this release. Set `SESSION_PROXY_URL_FETCH=false` when a session proxy is a WhatsApp-only route that cannot reach arbitrary media hosts.
 - whatsapp-web.js: `POST /api/sessions/{sessionId}/calls/{callId}/reject` answers `501` instead of a `200` that did not stop the call from ringing.
+- whatsapp-web.js: a `WWEBJS_ONBOARDING_CONTINUE_LABELS` label is clicked only on a button inside a `[role="dialog"]` or `[aria-modal="true"]` container, the same scope the `onboarding_dialog_unrecognized` warning reports labels from.
 - The gateway makes an outbound request to `api.github.com` when an admin opens the dashboard, to find the latest release. The answer is cached for six hours, or fifteen minutes after a failure. Set `UPDATE_CHECK_ENABLED=false` where that egress is not wanted.
 
 ### Security
