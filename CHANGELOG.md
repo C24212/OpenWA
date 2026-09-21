@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Baileys `listMessage`, `buttonsResponseMessage`, `templateButtonReplyMessage` and `listResponseMessage` now classify as `type: "text"` (they previously fell through to `unknown`). Consumers filtering on `type` will see those shapes as text. Thanks @gabrielmmoraes1999.
 - The PostgreSQL data connection is pinned to UTC: parameters bind as UTC, naive timestamps read back as UTC, every pooled connection sets its session `TimeZone`, and boot fails when the effective zone is not UTC year round.
 - Credentials on a `socks4://` session proxy are reported at session start as unauthenticatable: SOCKS4 sends the user name as the connect request's user id and drops the password.
+- whatsapp-web.js clicks a `WWEBJS_ONBOARDING_CONTINUE_LABELS` label only on a button inside a visible dialog. It matched any visible button with that exact text anywhere on the page, and every click counts toward the limit that moves a ready session to `action_required` ([#1679](https://github.com/rmyndharis/OpenWA/issues/1679)). Thanks @DavidgFernandes for the report.
 
 ### Fixed
 
@@ -104,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WebSocket command replies are pushed on the `message` event as well as returned through the ack callback. A client that passes an ack AND listens on `message` therefore sees each reply twice from this release; handle it in one place.
 - A caller-supplied URL leaves through the session proxy from this release. Set `SESSION_PROXY_URL_FETCH=false` when a session proxy is a WhatsApp-only route that cannot reach arbitrary media hosts.
 - whatsapp-web.js: `POST /api/sessions/{sessionId}/calls/{callId}/reject` answers `501` instead of a `200` that did not stop the call from ringing.
+- whatsapp-web.js: a `WWEBJS_ONBOARDING_CONTINUE_LABELS` label is clicked only on a button inside a `[role="dialog"]` or `[aria-modal="true"]` container, the same scope the `onboarding_dialog_unrecognized` warning reports labels from.
 
 ### Security
 

@@ -558,7 +558,8 @@ once, so the session stops instead of being silently unlinked by WhatsApp about 
 > flags unless `PUPPETEER_ARGS` already carries a `--lang`, but that sets the browser's language, and
 > WhatsApp Web may still render in the account's own language. For another language, add the modal's
 > confirm-button label to `WWEBJS_ONBOARDING_CONTINUE_LABELS` (for example `Continuar`) and restart the
-> session: the watcher runs only for the first minutes after `ready`. If your deployment gets a
+> session: the watcher runs only for the first minutes after `ready`. A configured label is clicked
+> without the English heading check, but only on a button inside a visible dialog. If your deployment gets a
 > localised modal without a matching label, it is **not** auto-dismissed and the session never reaches
 > `action_required`; instead it links normally, then drops to `disconnected` with reason `LOGOUT` a few
 > minutes later and the device disappears from the phone's Linked devices list. That miss is not

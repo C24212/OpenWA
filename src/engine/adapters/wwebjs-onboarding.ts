@@ -17,7 +17,8 @@ export const ONBOARDING_DEFAULT_CONTINUE_LABEL = 'Continue';
  *
  * Supplying labels also drops the heading requirement for THOSE labels: the English heading regex
  * would reject a localised modal anyway, so requiring both would make the setting useless. That is a
- * deliberate, operator-opted-in loosening — see {@link probeOnboardingModal}.
+ * deliberate, operator-opted-in loosening, bounded by requiring the button to sit inside a visible
+ * dialog; see {@link probeOnboardingModal}.
  */
 export function resolveOnboardingContinueLabels(): string[] {
   const extra = (process.env.WWEBJS_ONBOARDING_CONTINUE_LABELS ?? '')
@@ -49,6 +50,8 @@ export function resolveOnboardingContinueLabels(): string[] {
  * modal in Portuguese (#1679). Another language is covered by an operator-supplied label (see
  * {@link resolveOnboardingContinueLabels}), which matches WITHOUT the heading check: the English
  * heading would reject a localised modal regardless, so requiring both would make the setting inert.
+ * It does require a `[role="dialog"]` or `[aria-modal="true"]` ancestor, so the word is only clicked
+ * where a modal can be.
  * The default `Continue` keeps the heading requirement, so the out-of-the-box false-positive surface
  * is unchanged.
  */
@@ -68,8 +71,20 @@ export function probeOnboardingModal(options?: { labels?: string[]; headingOptio
   const candidates = Array.from(document.querySelectorAll('button, [role="button"]'))
     .map(el => ({ el, label: (el.textContent || '').trim() }))
     .filter(c => isVisible(c.el) && labels.includes(c.label));
+  // An operator label carries no heading check, so it has to sit inside a dialog at least: matched
+  // page-wide, the same word on any other button would be clicked, and every click counts toward the
+  // limit that takes a ready session to action_required. Same bounded walk and dialog markers as
+  // collectDialogDiagnostics, which is where operators read the label from.
+  const insideDialog = (el: Element): boolean => {
+    let scope: Element | null = el.parentElement;
+    for (let depth = 0; depth < 12 && scope; depth++, scope = scope.parentElement) {
+      if (scope.getAttribute('role') === 'dialog' || scope.getAttribute('aria-modal') === 'true') return true;
+    }
+    return false;
+  };
   for (const { el, label } of candidates.reverse()) {
     if (headingOptional.has(label)) {
+      if (!insideDialog(el)) continue;
       (el as HTMLElement).click();
       return { modalPresent: true, dismissed: true };
     }
